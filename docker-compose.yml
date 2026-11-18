@@ -4,7 +4,7 @@ version: "3.8"
 
 services:
   manga-dup-finder:
-    image: manga-dup-finder:latest
+    image: ghcr.io/alexlx4773h/findduplicates:latest
     pull_policy: always
     build:
       context: .
@@ -36,7 +36,7 @@ services:
       # Optional configuration file
       - "./config.example.yaml:/app/config.yaml:ro"
     labels:
-      icon: "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/icon.png"
+      icon: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/icon.png"
 
 # CasaOS App Store Metadata & Dashboard UI Settings
 x-casaos:
@@ -52,12 +52,12 @@ x-casaos:
     en_us: "Scan, detect, and resolve duplicate chapters across Manga and Doujinshi libraries. Features intra-series and global cross-directory duplicate detection, perceptual image hashing, and an interactive UI to click-and-confirm what stays, what moves to archive, or what gets deleted."
   tagline:
     en_us: "Manga & Doujinshi Interactive Duplicate Finder"
-  developer: "Alex"
-  author: "Alex"
-  icon: "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/icon.png"
-  thumbnail: "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/banner.png"
+  developer: "AlexLX4773H"
+  author: "AlexLX4773H"
+  icon: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/icon.png"
+  thumbnail: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/banner.png"
   screenshot_link:
-    - "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/banner.png"
+    - "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/banner.png"
   title:
     en_us: "FindDuplicates"
   category: "Media"
