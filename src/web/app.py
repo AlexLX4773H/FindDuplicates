@@ -1,15 +1,16 @@
 """
 Interactive Web Application & API Server
 FastAPI backend powering the interactive dashboard inside Docker & CasaOS.
-Provides endpoints to trigger scans, review duplicates, and click-to-confirm file actions.
+Provides endpoints to trigger scans, configure multiple scan paths, review duplicates,
+and click-to-confirm file actions.
 """
 
 import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 from fastapi import FastAPI, Request, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.config import load_config, normalize_path
@@ -17,9 +18,11 @@ from src.scanner import scan_manga_directory, scan_doujinshi_directory
 from src.detector import detect_manga_duplicates, detect_manga_partials, detect_doujinshi_duplicates
 from src.parser import parse_tree_dump_lines
 from src.actions import ActionExecutor
+from src.reporter import export_json, export_csv, export_html
+from src.image_hasher import verify_chapter_similarity, compute_perceptual_hash, compute_hamming_distance
 from src.models import DuplicateGroup, PartialIssue
 
-app = FastAPI(title="FindDuplicates Dashboard", version="2.0.0")
+app = FastAPI(title="FindDuplicates Dashboard", version="2.1.0")
 
 # In-memory session state for interactive UI
 STATE = {
@@ -30,7 +33,7 @@ STATE = {
     "manga_partials": [],    # List[PartialIssue]
     "doujinshi_duplicates": [], # List[DuplicateGroup]
     "status_message": "Ready. No active scan running.",
-    "active_reports": [],
+    "scan_progress": "",
 }
 
 action_executor = ActionExecutor(default_archive_dir="./archive")
@@ -57,6 +60,8 @@ class ScanPayload(BaseModel):
     target: str = "manga"  # 'manga', 'doujinshi', 'all'
     mode: str = "name"     # 'name', 'image'
     paths: Optional[List[str]] = None
+    manga_paths: Optional[List[str]] = None
+    doujinshi_paths: Optional[List[str]] = None
 
 
 @app.get("/api/state")
@@ -67,10 +72,40 @@ def get_state():
         "last_scan_time": STATE["last_scan_time"],
         "total_scanned": STATE["total_scanned"],
         "status_message": STATE["status_message"],
+        "scan_progress": STATE["scan_progress"],
         "manga_duplicates_count": len(STATE["manga_duplicates"]),
         "manga_partials_count": len(STATE["manga_partials"]),
         "doujinshi_duplicates_count": len(STATE["doujinshi_duplicates"]),
     }
+
+
+@app.get("/api/config-paths")
+def get_config_paths():
+    """Returns configured and detected paths for Manga and Doujinshi."""
+    cfg = load_config()
+    return {
+        "manga_defaults": [
+            "/media/manga",
+            "/sg2b/Share2sgb/Manga"
+        ],
+        "doujinshi_defaults": [
+            "/media/doujinshi",
+            "/media/devmon/L500/Vere NewFolder"
+        ],
+        "current_scan_paths": [str(p) for p in cfg.get("normalized_scan_paths", [])],
+        "archive_dir": os.getenv("ARCHIVE_DIR", "./archive"),
+        "reports_dir": os.getenv("OUTPUT_DIR", "./reports"),
+    }
+
+
+@app.get("/api/casaos-compose")
+def get_casaos_compose():
+    """Returns the pre-configured docker-compose.yml content for 1-click CasaOS import."""
+    compose_path = Path("docker-compose.yml")
+    if compose_path.exists():
+        with open(compose_path, "r", encoding="utf-8") as f:
+            return {"content": f.read()}
+    return {"content": "# docker-compose.yml not found"}
 
 
 @app.get("/api/duplicates")
@@ -142,48 +177,170 @@ def run_parse_tree(payload: ParseTreePayload):
         }
 
 
-def _run_background_scan(target: str, mode: str, paths: Optional[List[str]]):
+def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]]):
     STATE["is_scanning"] = True
-    STATE["status_message"] = f"Scanning {target} ({mode}-based)..."
+    STATE["status_message"] = f"Starting scan for {target} ({mode}-based)..."
+    STATE["scan_progress"] = "Resolving directories..."
+
     try:
         cfg = load_config()
-        if not paths:
-            paths = cfg.get("normalized_scan_paths", [])
-        else:
-            paths = [normalize_path(p) for p in paths]
 
+        # Parse manga paths
+        m_targets: List[Path] = []
+        if manga_paths:
+            m_targets = [normalize_path(p) for p in manga_paths if p.strip()]
+        elif target == "manga" and paths:
+            m_targets = [normalize_path(p) for p in paths if p.strip()]
+        else:
+            # Fallback to configured or user's specific defaults
+            candidate_paths = [
+                "/media/manga",
+                "/sg2b/Share2sgb/Manga"
+            ] + [str(p) for p in cfg.get("normalized_manga_paths", [])]
+            for cp in candidate_paths:
+                np = normalize_path(cp)
+                if np.exists() and np not in m_targets:
+                    m_targets.append(np)
+
+        # Parse doujinshi paths
+        d_targets: List[Path] = []
+        if doujinshi_paths:
+            d_targets = [normalize_path(p) for p in doujinshi_paths if p.strip()]
+        elif target == "doujinshi" and paths:
+            d_targets = [normalize_path(p) for p in paths if p.strip()]
+        else:
+            candidate_paths = [
+                "/media/doujinshi",
+                "/media/devmon/L500/Vere NewFolder"
+            ] + [str(p) for p in cfg.get("normalized_doujinshi_paths", [])]
+            for cp in candidate_paths:
+                np = normalize_path(cp)
+                if np.exists() and np not in d_targets:
+                    d_targets.append(np)
+
+        # If user selected 'all' and provided generic paths
+        if target == "all" and paths:
+            for p in paths:
+                np = normalize_path(p)
+                if np.exists():
+                    # Check whether path looks like manga or doujinshi
+                    p_lower = str(np).lower()
+                    if "manga" in p_lower or "manhwa" in p_lower:
+                        if np not in m_targets:
+                            m_targets.append(np)
+                    else:
+                        if np not in d_targets:
+                            d_targets.append(np)
+
+        # 1. Scan Manga
         if target in ("manga", "all"):
             chapters = []
-            for p in paths:
-                if p.exists():
-                    chapters.extend(scan_manga_directory(p))
-            STATE["manga_duplicates"] = detect_manga_duplicates(chapters)
-            STATE["manga_partials"] = detect_manga_partials(chapters)
-            STATE["total_scanned"] += len(chapters)
+            for mp in m_targets:
+                if mp.exists():
+                    STATE["scan_progress"] = f"Scanning Manga directory: {mp.name}..."
+                    found = scan_manga_directory(mp)
+                    chapters.extend(found)
+                else:
+                    print(f"[!] Manga directory not found: {mp}")
 
+            STATE["scan_progress"] = f"Analyzing {len(chapters)} manga chapters for duplicates..."
+            dupes = detect_manga_duplicates(chapters)
+            parts = detect_manga_partials(chapters)
+
+            if mode == "image":
+                STATE["scan_progress"] = "Running visual perceptual hash verification on duplicate chapters..."
+                for g in dupes:
+                    if len(g.items) >= 2:
+                        pa = g.items[0].get("file_path", "")
+                        pb = g.items[1].get("file_path", "")
+                        if pa and pb:
+                            match, dist, expl = verify_chapter_similarity(pa, pb)
+                            g.hamming_distance = dist
+                            g.recommendation += f" [Visual Verification: {expl}]"
+
+            STATE["manga_duplicates"] = dupes
+            STATE["manga_partials"] = parts
+            STATE["total_scanned"] = len(chapters)
+
+        # 2. Scan Doujinshi
         if target in ("doujinshi", "all"):
             works = []
-            for p in paths:
-                if p.exists():
-                    works.extend(scan_doujinshi_directory(p))
-            STATE["doujinshi_duplicates"] = detect_doujinshi_duplicates(works)
-            STATE["total_scanned"] += len(works)
+            for dp in d_targets:
+                if dp.exists():
+                    STATE["scan_progress"] = f"Scanning Doujinshi directory: {dp.name}..."
+                    found = scan_doujinshi_directory(dp)
+                    works.extend(found)
+                else:
+                    print(f"[!] Doujinshi directory not found: {dp}")
 
-        STATE["status_message"] = f"Scan complete. Found {len(STATE['manga_duplicates'])} manga and {len(STATE['doujinshi_duplicates'])} doujinshi duplicate groups."
+            STATE["scan_progress"] = f"Analyzing {len(works)} doujinshi works across directories..."
+            dupes = detect_doujinshi_duplicates(works)
+
+            if mode == "image":
+                STATE["scan_progress"] = "Extracting cover perceptual hashes..."
+                hashes = {}
+                for w in works:
+                    if w.file_path:
+                        h = compute_perceptual_hash(w.file_path, 0)
+                        if h:
+                            hashes[w.file_path] = h
+                for g in dupes:
+                    if len(g.items) >= 2:
+                        pa = g.items[0].get("file_path", "")
+                        pb = g.items[1].get("file_path", "")
+                        if pa in hashes and pb in hashes:
+                            dist = compute_hamming_distance(hashes[pa], hashes[pb])
+                            g.hamming_distance = dist
+                            if dist is not None:
+                                g.recommendation += f" [Cover Distance: {dist}]"
+
+            STATE["doujinshi_duplicates"] = dupes
+            if target == "doujinshi":
+                STATE["total_scanned"] = len(works)
+            else:
+                STATE["total_scanned"] += len(works)
+
+        # Auto-export updated reports
+        reports_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        all_dupes = STATE["manga_duplicates"] + STATE["doujinshi_duplicates"]
+        all_parts = STATE["manga_partials"]
+        export_json(all_dupes, all_parts, str(reports_dir / "latest_report.json"))
+        export_csv(all_dupes, str(reports_dir / "latest_report.csv"))
+        export_html(all_dupes, all_parts, STATE["total_scanned"], str(reports_dir / "latest_report.html"))
+
+        STATE["last_scan_time"] = datetime.now().isoformat()
+        STATE["status_message"] = (
+            f"Scan finished: {len(STATE['manga_duplicates'])} manga and "
+            f"{len(STATE['doujinshi_duplicates'])} doujinshi duplicate groups detected."
+        )
+        STATE["scan_progress"] = "Scan finished successfully."
+
     except Exception as e:
         STATE["status_message"] = f"Scan error: {e}"
+        STATE["scan_progress"] = f"Error: {e}"
     finally:
         STATE["is_scanning"] = False
 
 
 @app.post("/api/scan")
 def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
-    """Triggers a background scan."""
+    """Triggers a background scan with single or multiple custom paths."""
     if STATE["is_scanning"]:
-        return JSONResponse(status_code=400, content={"error": "A scan is already in progress."})
+        return JSONResponse(status_code=400, content={"error": "A scan is already in progress. Please wait."})
 
-    background_tasks.add_task(_run_background_scan, payload.target, payload.mode, payload.paths)
-    return {"status": "started", "message": f"Scan triggered for {payload.target}"}
+    background_tasks.add_task(
+        _run_background_scan,
+        target=payload.target,
+        mode=payload.mode,
+        paths=payload.paths,
+        manga_paths=payload.manga_paths,
+        doujinshi_paths=payload.doujinshi_paths
+    )
+    return {
+        "status": "started",
+        "message": f"Scan triggered for target '{payload.target}' using {payload.mode}-based modality."
+    }
 
 
 @app.get("/", response_class=HTMLResponse)

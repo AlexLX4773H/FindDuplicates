@@ -1,55 +1,30 @@
-# Configuration for Manga & Doujinshi Duplicate Finder
+# FindDuplicates Configuration
+# Paths can be Windows drive letters (G:\LX\Manga), UNC shares (\\NAS\Manga),
+# or Linux / CasaOS paths (/media/manga, /sg2b/Share2sgb/Manga).
 
-# Paths to scan: Supports Windows paths, UNC network shares, and Linux/CasaOS paths
-scan_paths:
-  # Linux / CasaOS Paths:
-  - "/DATA/Media/Manga"
-  - "/DATA/Media/Doujinshi"
-
-  # Windows Local or Network Share Paths (uncomment on Windows):
-  # - "G:\\LX\\Manga"
-  # - "D:\\Manga Collections"
-  # - "\\\\192.168.1.100\\Media\\Doujinshi"
-
-detection:
-  # Detect fractional/partial chapters (e.g. Ch 10.1 vs Ch 10)
-  detect_fractional_chapters: true
-
-  # Detect chapters with suspiciously low page counts compared to duplicates (e.g. < 60% of max pages)
-  detect_incomplete_pages: true
+manga:
+  scan_paths:
+    - "/media/manga"
+    - "/sg2b/Share2sgb/Manga"
+  detect_fractional: true
   min_page_ratio: 0.60
+  supported_archives: [".cbz", ".zip", ".cbr", ".rar"]
 
-  # Keywords indicating partial or sample releases
-  partial_keywords:
-    - "incomplete"
-    - "sample"
-    - "preview"
-    - "partial"
-    - "missing"
-    - "tbr"
+doujinshi:
+  scan_paths:
+    - "/media/doujinshi"
+    - "/media/devmon/L500/Vere NewFolder"
+  fuzzy_threshold: 88
+  cross_directory: true
+  leaf_chapter_names: ["chapter", "_chapter", "read the chapter"]
 
-  # Archive extensions to inspect
-  supported_archives:
-    - ".cbz"
-    - ".zip"
-    - ".cbr"
-    - ".rar"
-
-  # Image extensions inside loose folders
-  supported_images:
-    - ".jpg"
-    - ".jpeg"
-    - ".png"
-    - ".webp"
-    - ".avif"
+image_inspection:
+  enabled: true
+  hash_algorithm: "dhash" # dhash or phash
+  hash_size: 8
+  hamming_threshold: 6
+  cache_directory: "./cache"
 
 output:
-  # Directory where scan results will be saved
   report_directory: "./reports"
-
-  # Export formats: 'terminal', 'json', 'csv', 'html'
-  formats:
-    - "terminal"
-    - "html"
-    - "json"
-    - "csv"
+  formats: ["terminal", "html", "json", "csv"]

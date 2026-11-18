@@ -11,6 +11,8 @@
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+    @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .scanning-pulse { animation: pulse-slow 1.5s infinite; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col">
@@ -27,12 +29,15 @@
         <h1 class="text-lg font-extrabold bg-gradient-to-r from-violet-300 via-pink-300 to-cyan-300 bg-clip-text text-transparent">
           FindDuplicates Dashboard
         </h1>
-        <p class="text-[11px] text-slate-400" id="statusMessage">Connecting to engine...</p>
+        <div class="flex items-center gap-2">
+          <span id="scanStatusIndicator" class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+          <p class="text-[11px] text-slate-400" id="statusMessage">Connecting to engine...</p>
+        </div>
       </div>
     </div>
 
-    <!-- Quick Stats -->
-    <div class="flex items-center gap-2 text-xs">
+    <!-- Quick Actions & Stats -->
+    <div class="flex flex-wrap items-center gap-2 text-xs">
       <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
         <span class="text-slate-400">Scanned:</span>
         <span id="statScanned" class="font-bold text-violet-400">0</span>
@@ -45,12 +50,20 @@
         <span class="text-slate-400">Doujinshi Dupes:</span>
         <span id="statDoujinDupes" class="font-bold text-cyan-400">0</span>
       </div>
-      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
-        <span class="text-slate-400">Partials:</span>
-        <span id="statPartials" class="font-bold text-amber-400">0</span>
-      </div>
+
+      <!-- Action Buttons -->
+      <button onclick="openScanModal()" id="btnOpenScanModal"
+              class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs shadow-md shadow-cyan-600/30 transition flex items-center gap-1.5">
+        <span>🚀 Run Scan</span>
+      </button>
+
+      <button onclick="openCasaOSModal()"
+              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5">
+        <span>🏠 CasaOS Guide</span>
+      </button>
+
       <button onclick="openConfirmModal()" id="btnReviewActions"
-              class="ml-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 font-bold text-xs shadow-md shadow-violet-600/30 transition flex items-center gap-1.5">
+              class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 font-bold text-xs shadow-md shadow-violet-600/30 transition flex items-center gap-1.5">
         <span>⚡ Review & Confirm</span>
         <span id="actionBadge" class="bg-white/20 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
       </button>
@@ -74,7 +87,7 @@
           <span>⚠️ Partials / Splits</span>
         </button>
         <button onclick="switchTab('samples')" id="tab-samples" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
-          <span>📂 Load Sample Trees</span>
+          <span>📂 Offline Tree Dumps</span>
         </button>
       </div>
 
@@ -95,7 +108,7 @@
         <span>⚡ Quick Ingestion from Sample Data Dumps</span>
       </h2>
       <p class="text-xs text-slate-400">
-        Run instant offline duplicate detection directly against the tree dump files located in your workspace without needing NAS drives mounted:
+        Run instant offline duplicate detection directly against the tree dump files located in your workspace without needing storage drives mounted:
       </p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
         <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
@@ -142,15 +155,182 @@
 
   </main>
 
-  <!-- Interactive Action Confirmation Modal -->
-  <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-    <div class="glass max-w-3xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-6">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+  <!-- ===================================================================== -->
+  <!-- MODAL: RUN SCAN & CONFIGURE PATHS                                     -->
+  <!-- ===================================================================== -->
+  <div id="scanModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="glass max-w-2xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h2 class="text-lg font-extrabold text-slate-100 flex items-center gap-2">
+            <span>🚀 Configure & Trigger Scan</span>
+          </h2>
+          <p class="text-xs text-slate-400">Run duplicate detection across single or multiple custom library paths.</p>
+        </div>
+        <button onclick="closeScanModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
+      </div>
+
+      <!-- Target Selection -->
+      <div class="space-y-2">
+        <label class="block text-xs font-bold text-slate-300">Scan Target Library:</label>
+        <div class="grid grid-cols-3 gap-2">
+          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-violet-500 transition">
+            <input type="radio" name="scanTarget" value="manga" checked class="accent-violet-600">
+            <div>
+              <div class="text-xs font-bold text-slate-200">📚 Manga / Manhwa</div>
+              <div class="text-[10px] text-slate-400">Intra-Series Scope</div>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-pink-500 transition">
+            <input type="radio" name="scanTarget" value="doujinshi" class="accent-pink-600">
+            <div>
+              <div class="text-xs font-bold text-slate-200">🌸 Doujinshi (H)</div>
+              <div class="text-[10px] text-slate-400">Global Cross-Directory</div>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-cyan-500 transition">
+            <input type="radio" name="scanTarget" value="all" class="accent-cyan-600">
+            <div>
+              <div class="text-xs font-bold text-slate-200">⚡ Both Libraries</div>
+              <div class="text-[10px] text-slate-400">Full Comprehensive Scan</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Mode Selection -->
+      <div class="space-y-2">
+        <label class="block text-xs font-bold text-slate-300">Detection Modality:</label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-cyan-500 transition">
+            <input type="radio" name="scanMode" value="name" checked class="accent-cyan-600">
+            <div>
+              <div class="text-xs font-bold text-slate-200">⚡ Name & Metadata (Fast)</div>
+              <div class="text-[10px] text-slate-400">Chapter numbers, tags, scanlators (zero I/O overhead)</div>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-violet-500 transition">
+            <input type="radio" name="scanMode" value="image" class="accent-violet-600">
+            <div>
+              <div class="text-xs font-bold text-slate-200">👁️ Visual Perceptual Hashing</div>
+              <div class="text-[10px] text-slate-400">Verifies identical artwork via dHash / pHash</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Scan Paths Input -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="block text-xs font-bold text-slate-300">Target Scan Directories (one path per line):</label>
+          <span class="text-[10px] text-slate-400">Single or multiple paths supported</span>
+        </div>
+        <textarea id="scanPathsInput" rows="4"
+                  placeholder="/media/manga&#10;/sg2b/Share2sgb/Manga"
+                  class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-mono focus:outline-none focus:border-cyan-500 custom-scrollbar"></textarea>
+
+        <!-- Quick-Fill Preset Buttons -->
+        <div class="space-y-1.5 pt-1">
+          <div class="text-[11px] text-slate-400 font-semibold">Quick-Add Configured Paths:</div>
+          <div class="flex flex-wrap gap-1.5 text-xs">
+            <button type="button" onclick="appendScanPath('/media/manga')"
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
+              + /media/manga
+            </button>
+            <button type="button" onclick="appendScanPath('/sg2b/Share2sgb/Manga')"
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
+              + /sg2b/Share2sgb/Manga
+            </button>
+            <button type="button" onclick="appendScanPath('/media/doujinshi')"
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
+              + /media/doujinshi
+            </button>
+            <button type="button" onclick="appendScanPath('/media/devmon/L500/Vere NewFolder')"
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
+              + /media/devmon/L500/Vere NewFolder
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Scan Message Box -->
+      <div id="scanStatusBox" class="hidden p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300"></div>
+
+      <!-- Footer Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+        <button onclick="closeScanModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300">
+          Cancel
+        </button>
+        <button onclick="launchScan()" id="btnStartScan"
+                class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-xs font-bold shadow-lg shadow-cyan-600/30 flex items-center gap-1.5">
+          <span>▶️ Start Scan</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: CASAOS IMPORT GUIDE & PRE-CONFIGURED COMPOSE                   -->
+  <!-- ===================================================================== -->
+  <div id="casaosModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="glass max-w-3xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h2 class="text-lg font-extrabold text-slate-100 flex items-center gap-2">
+            <span>🏠 1-Click Import into CasaOS</span>
+          </h2>
+          <p class="text-xs text-slate-400">Pre-configured with your storage paths (/sg2b/Share2sgb/Manga & /media/devmon/L500/Vere NewFolder).</p>
+        </div>
+        <button onclick="closeCasaOSModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
+      </div>
+
+      <!-- Step-by-Step Instructions -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+          <div class="font-bold text-violet-400">Step 1: Open CasaOS</div>
+          <p class="text-slate-300">Go to your CasaOS Web Dashboard, click <strong>App Store</strong>, then click <strong>Custom Install</strong> in the top right.</p>
+        </div>
+        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+          <div class="font-bold text-pink-400">Step 2: Click Import</div>
+          <p class="text-slate-300">Click the <strong>Import</strong> icon (top right of the install window) to open the docker-compose YAML editor.</p>
+        </div>
+        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+          <div class="font-bold text-cyan-400">Step 3: Paste & Submit</div>
+          <p class="text-slate-300">Copy the YAML below, paste it into CasaOS, and click <strong>Submit</strong>. The app tile will appear on your dashboard!</p>
+        </div>
+      </div>
+
+      <!-- Copy Compose Area -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-300">CasaOS Ready Docker Compose YAML:</span>
+          <button onclick="copyComposeYAML()" id="btnCopyCompose"
+                  class="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 font-bold text-xs text-white shadow-sm flex items-center gap-1 transition">
+            📋 Copy Compose YAML
+          </button>
+        </div>
+        <pre id="composeCodeBlock" class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-52 overflow-y-auto custom-scrollbar"></pre>
+      </div>
+
+      <div class="flex items-center justify-end pt-2 border-t border-slate-800">
+        <button onclick="closeCasaOSModal()" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300">
+          Close Guide
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: CONFIRM FILE ACTIONS (KEEP, ARCHIVE, DELETE)                   -->
+  <!-- ===================================================================== -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="glass max-w-3xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div>
           <h2 class="text-lg font-extrabold text-slate-100 flex items-center gap-2">
             <span>⚡ Confirm & Execute File Actions</span>
           </h2>
-          <p class="text-xs text-slate-400 mt-0.5">Review items marked for archive or deletion before execution.</p>
+          <p class="text-xs text-slate-400">Review items marked for archive or deletion before execution.</p>
         </div>
         <button onclick="closeConfirmModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
       </div>
@@ -172,7 +352,7 @@
       </div>
 
       <!-- Destination Configuration -->
-      <div class="space-y-3">
+      <div class="space-y-2">
         <label class="block text-xs font-semibold text-slate-300">Target Archive Root Directory:</label>
         <input id="archiveDirInput" type="text" value="./archive"
                class="w-full bg-slate-900 border border-slate-700 px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-violet-500 font-mono">
@@ -207,18 +387,25 @@
     let activeTab = 'manga';
     let duplicatesData = [];
     let partialsData = [];
-    // Key: item_path -> action: 'keep' | 'move_archive' | 'delete' | 'skip'
     let selectedActions = {};
+    let isScanning = false;
 
     async function fetchState() {
       try {
         const res = await fetch('/api/state');
         const data = await res.json();
+        isScanning = data.is_scanning;
         document.getElementById('statusMessage').innerText = data.status_message || 'Ready';
         document.getElementById('statScanned').innerText = data.total_scanned;
         document.getElementById('statMangaDupes').innerText = data.manga_duplicates_count;
         document.getElementById('statDoujinDupes').innerText = data.doujinshi_duplicates_count;
-        document.getElementById('statPartials').innerText = data.manga_partials_count;
+
+        const indicator = document.getElementById('scanStatusIndicator');
+        if (isScanning) {
+          indicator.className = 'inline-block w-2 h-2 rounded-full bg-cyan-400 scanning-pulse';
+        } else {
+          indicator.className = 'inline-block w-2 h-2 rounded-full bg-emerald-500';
+        }
       } catch (e) {
         console.error(e);
       }
@@ -301,7 +488,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = `<div class="p-12 text-center text-slate-500 glass rounded-2xl">No ${activeTab} duplicates found. Try loading a sample tree or running a scan.</div>`;
+        container.innerHTML = `<div class="p-12 text-center text-slate-500 glass rounded-2xl">No ${activeTab} duplicates found. Click <strong>"🚀 Run Scan"</strong> or explore sample tree dumps.</div>`;
         return;
       }
 
@@ -315,7 +502,6 @@
           const group = it.scanlator_group || it.scanlator || 'Uncredited';
           const isKeeper = (path === g.recommended_keep_path || name === g.recommended_keep_path);
 
-          // Get current selected action or default to recommendation
           if (!selectedActions[path]) {
             selectedActions[path] = isKeeper ? 'keep' : 'move_archive';
           }
@@ -402,6 +588,118 @@
       document.getElementById('actionBadge').innerText = totalPending;
     }
 
+    // =========================================================================
+    // SCAN MODAL LOGIC
+    // =========================================================================
+    function openScanModal() {
+      const targetRadio = document.querySelector('input[name="scanTarget"]:checked').value;
+      updateDefaultScanPathsForTarget(targetRadio);
+      document.getElementById('scanStatusBox').classList.add('hidden');
+      document.getElementById('scanModal').classList.remove('hidden');
+    }
+
+    function closeScanModal() {
+      document.getElementById('scanModal').classList.add('hidden');
+    }
+
+    function updateDefaultScanPathsForTarget(target) {
+      const pathsBox = document.getElementById('scanPathsInput');
+      if (pathsBox.value.trim() === '') {
+        if (target === 'manga') {
+          pathsBox.value = '/media/manga\n/sg2b/Share2sgb/Manga';
+        } else if (target === 'doujinshi') {
+          pathsBox.value = '/media/doujinshi\n/media/devmon/L500/Vere NewFolder';
+        } else {
+          pathsBox.value = '/media/manga\n/media/doujinshi';
+        }
+      }
+    }
+
+    document.querySelectorAll('input[name="scanTarget"]').forEach(r => {
+      r.addEventListener('change', (e) => {
+        updateDefaultScanPathsForTarget(e.target.value);
+      });
+    });
+
+    function appendScanPath(path) {
+      const ta = document.getElementById('scanPathsInput');
+      const lines = ta.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (!lines.includes(path)) {
+        lines.push(path);
+        ta.value = lines.join('\n');
+      }
+    }
+
+    async function launchScan() {
+      const target = document.querySelector('input[name="scanTarget"]:checked').value;
+      const mode = document.querySelector('input[name="scanMode"]:checked').value;
+      const rawPaths = document.getElementById('scanPathsInput').value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+      const statusBox = document.getElementById('scanStatusBox');
+      statusBox.classList.remove('hidden');
+      statusBox.innerHTML = '<span class="scanning-pulse">🚀 Triggering scan in background...</span>';
+
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            target: target,
+            mode: mode,
+            paths: rawPaths
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          statusBox.innerHTML = `<span class="text-emerald-400 font-bold">✓ Scan started!</span> Scanning in background...`;
+          setTimeout(() => {
+            closeScanModal();
+            switchTab(target === 'doujinshi' ? 'doujinshi' : 'manga');
+          }, 1200);
+        } else {
+          statusBox.innerHTML = `<span class="text-rose-400 font-bold">Error:</span> ${data.error || 'Failed to start scan'}`;
+        }
+      } catch (e) {
+        statusBox.innerHTML = `<span class="text-rose-400 font-bold">Error:</span> ${e}`;
+      }
+    }
+
+    // =========================================================================
+    // CASAOS GUIDE MODAL LOGIC
+    // =========================================================================
+    async function openCasaOSModal() {
+      try {
+        const res = await fetch('/api/casaos-compose');
+        const data = await res.json();
+        document.getElementById('composeCodeBlock').innerText = data.content || '# Error loading docker-compose.yml';
+      } catch (e) {
+        document.getElementById('composeCodeBlock').innerText = '# Error loading compose file';
+      }
+      document.getElementById('casaosModal').classList.remove('hidden');
+    }
+
+    function closeCasaOSModal() {
+      document.getElementById('casaosModal').classList.add('hidden');
+    }
+
+    function copyComposeYAML() {
+      const yamlText = document.getElementById('composeCodeBlock').innerText;
+      navigator.clipboard.writeText(yamlText).then(() => {
+        const btn = document.getElementById('btnCopyCompose');
+        btn.innerText = '✓ Copied to Clipboard!';
+        btn.classList.remove('bg-violet-600');
+        btn.classList.add('bg-emerald-600');
+        setTimeout(() => {
+          btn.innerText = '📋 Copy Compose YAML';
+          btn.classList.remove('bg-emerald-600');
+          btn.classList.add('bg-violet-600');
+        }, 2500);
+      });
+    }
+
+    // =========================================================================
+    // ACTION CONFIRMATION MODAL LOGIC
+    // =========================================================================
     function openConfirmModal() {
       let keep = 0, move = 0, del = 0;
       Object.values(selectedActions).forEach(a => {
@@ -482,10 +780,10 @@
 
     document.getElementById('searchInput').addEventListener('input', renderActiveView);
 
-    // Initial load
+    // Initial polling
     fetchState();
     loadData();
-    setInterval(fetchState, 5000);
+    setInterval(fetchState, 3500);
   </script>
 </body>
 </html>
