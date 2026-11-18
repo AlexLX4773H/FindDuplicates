@@ -242,28 +242,20 @@
           <span class="text-[10px] text-slate-400">Single or multiple paths supported</span>
         </div>
         <textarea id="scanPathsInput" rows="4"
-                  placeholder="/media/manga&#10;/sg2b/Share2sgb/Manga"
+                  placeholder="/sg2b/Share2sgb/Manga&#10;/media/devmon/L500/Vere NewFolder"
                   class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-mono focus:outline-none focus:border-cyan-500 custom-scrollbar"></textarea>
 
         <!-- Quick-Fill Preset Buttons -->
         <div class="space-y-1.5 pt-1">
           <div class="text-[11px] text-slate-400 font-semibold">Quick-Add Configured Paths:</div>
           <div class="flex flex-wrap gap-1.5 text-xs">
-            <button type="button" onclick="appendScanPath('/media/manga')"
-                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
-              + /media/manga
-            </button>
             <button type="button" onclick="appendScanPath('/sg2b/Share2sgb/Manga')"
                     class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
-              + /sg2b/Share2sgb/Manga
-            </button>
-            <button type="button" onclick="appendScanPath('/media/doujinshi')"
-                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
-              + /media/doujinshi
+              + /sg2b/Share2sgb/Manga (Manga)
             </button>
             <button type="button" onclick="appendScanPath('/media/devmon/L500/Vere NewFolder')"
                     class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
-              + /media/devmon/L500/Vere NewFolder
+              + /media/devmon/L500/Vere NewFolder (Doujinshi)
             </button>
           </div>
         </div>
@@ -673,11 +665,11 @@
       const pathsBox = document.getElementById('scanPathsInput');
       if (pathsBox.value.trim() === '') {
         if (target === 'manga') {
-          pathsBox.value = '/media/manga\n/sg2b/Share2sgb/Manga';
+          pathsBox.value = '/sg2b/Share2sgb/Manga';
         } else if (target === 'doujinshi') {
-          pathsBox.value = '/media/doujinshi\n/media/devmon/L500/Vere NewFolder';
+          pathsBox.value = '/media/devmon/L500/Vere NewFolder';
         } else {
-          pathsBox.value = '/media/manga\n/media/doujinshi';
+          pathsBox.value = '/sg2b/Share2sgb/Manga\n/media/devmon/L500/Vere NewFolder';
         }
       }
     }

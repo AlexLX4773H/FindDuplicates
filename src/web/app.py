@@ -85,11 +85,9 @@ def get_config_paths():
     cfg = load_config()
     return {
         "manga_defaults": [
-            "/media/manga",
             "/sg2b/Share2sgb/Manga"
         ],
         "doujinshi_defaults": [
-            "/media/doujinshi",
             "/media/devmon/L500/Vere NewFolder"
         ],
         "current_scan_paths": [str(p) for p in cfg.get("normalized_scan_paths", [])],
@@ -278,7 +276,6 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
         else:
             # Fallback to configured or user's specific defaults
             candidate_paths = [
-                "/media/manga",
                 "/sg2b/Share2sgb/Manga"
             ] + [str(p) for p in cfg.get("normalized_manga_paths", [])]
             for cp in candidate_paths:
@@ -294,7 +291,6 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             d_targets = [normalize_path(p) for p in paths if p.strip()]
         else:
             candidate_paths = [
-                "/media/doujinshi",
                 "/media/devmon/L500/Vere NewFolder"
             ] + [str(p) for p in cfg.get("normalized_doujinshi_paths", [])]
             for cp in candidate_paths:

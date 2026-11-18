@@ -1,10 +1,9 @@
 # FindDuplicates Configuration
 # Paths can be Windows drive letters (G:\LX\Manga), UNC shares (\\NAS\Manga),
-# or Linux / CasaOS paths (/media/manga, /sg2b/Share2sgb/Manga).
+# or Linux / CasaOS paths (/sg2b/Share2sgb/Manga, /media/devmon/L500/Vere NewFolder).
 
 manga:
   scan_paths:
-    - "/media/manga"
     - "/sg2b/Share2sgb/Manga"
   detect_fractional: true
   min_page_ratio: 0.60
@@ -12,7 +11,6 @@ manga:
 
 doujinshi:
   scan_paths:
-    - "/media/doujinshi"
     - "/media/devmon/L500/Vere NewFolder"
   fuzzy_threshold: 88
   cross_directory: true

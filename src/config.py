@@ -11,17 +11,13 @@ import yaml
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "scan_paths": [
-        "/media/manga",
-        "/media/doujinshi",
         "/sg2b/Share2sgb/Manga",
         "/media/devmon/L500/Vere NewFolder"
     ],
     "manga_paths": [
-        "/media/manga",
         "/sg2b/Share2sgb/Manga"
     ],
     "doujinshi_paths": [
-        "/media/doujinshi",
         "/media/devmon/L500/Vere NewFolder"
     ],
     "detection": {
@@ -64,9 +60,9 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     config = DEFAULT_CONFIG.copy()
 
     # Fallback to config.example.yaml if config.yaml does not exist
-    actual_path = config_path if os.path.exists(config_path) else ("config.example.yaml" if os.path.exists("config.example.yaml") else None)
+    actual_path = config_path if (os.path.exists(config_path) and os.path.isfile(config_path)) else ("config.example.yaml" if (os.path.exists("config.example.yaml") and os.path.isfile("config.example.yaml")) else None)
 
-    if actual_path and os.path.exists(actual_path):
+    if actual_path and os.path.exists(actual_path) and os.path.isfile(actual_path):
         try:
             with open(actual_path, "r", encoding="utf-8") as f:
                 user_cfg = yaml.safe_load(f) or {}
