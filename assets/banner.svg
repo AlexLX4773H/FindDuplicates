@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500" width="1024" height="500">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bannerBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0d1a" />
+      <stop offset="50%" stop-color="#14182b" />
+      <stop offset="100%" stop-color="#0a0d1a" />
+    </linearGradient>
+
+    <!-- Mesh Glows -->
+    <radialGradient id="meshViolet" cx="15%" cy="30%" r="50%">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="meshRose" cx="80%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#f43f5e" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="meshCyan" cx="70%" cy="85%" r="45%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Card Gradients -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e243d" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#111628" stop-opacity="0.9" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="50%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1024" height="500" fill="url(#bannerBg)" />
+  <rect width="1024" height="500" fill="url(#meshViolet)" />
+  <rect width="1024" height="500" fill="url(#meshRose)" />
+  <rect width="1024" height="500" fill="url(#meshCyan)" />
+
+  <!-- Subtle Manga Screentone Grid Dots -->
+  <g opacity="0.06" fill="#ffffff">
+    <pattern id="dotPattern" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="2" />
+    </pattern>
+    <rect width="1024" height="500" fill="url(#dotPattern)" />
+  </g>
+
+  <!-- Left Content Column -->
+  <g transform="translate(64, 75)">
+    <!-- Small Category Pill -->
+    <rect x="0" y="0" width="168" height="30" rx="15" fill="#f43f5e" fill-opacity="0.15" stroke="#f43f5e" stroke-width="1.5" />
+    <text x="84" y="19" font-family="'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="11" fill="#fb7185" text-anchor="middle" letter-spacing="1.5">CASAOS UTILITY</text>
+
+    <!-- Main Title -->
+    <text x="0" y="78" font-family="'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="38" fill="#ffffff" letter-spacing="-0.5">
+      Manga &amp; Doujinshi
+    </text>
+    <text x="0" y="122" font-family="'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="38" fill="url(#accentGrad)" letter-spacing="-0.5">
+      Duplicate Finder
+    </text>
+
+    <!-- Description -->
+    <text x="0" y="166" font-family="'Segoe UI', Roboto, sans-serif" font-weight="400" font-size="15" fill="#94a3b8">
+      Intelligent cross-directory chapter deduplication &amp; partial
+    </text>
+    <text x="0" y="190" font-family="'Segoe UI', Roboto, sans-serif" font-weight="400" font-size="15" fill="#94a3b8">
+      release detector for Windows, Ubuntu Server &amp; CasaOS.
+    </text>
+
+    <!-- Feature Tags -->
+    <g transform="translate(0, 226)">
+      <!-- Badge 1: Cross-Platform -->
+      <rect x="0" y="0" width="134" height="28" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="67" y="18" font-family="'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="11.5" fill="#cbd5e1" text-anchor="middle">Win / Linux Paths</text>
+
+      <!-- Badge 2: Partial Detection -->
+      <rect x="144" y="0" width="144" height="28" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="216" y="18" font-family="'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="11.5" fill="#38bdf8" text-anchor="middle">Partial Ch. Detector</text>
+
+      <!-- Badge 3: Dockerized -->
+      <rect x="298" y="0" width="112" height="28" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="354" y="18" font-family="'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="11.5" fill="#a78bfa" text-anchor="middle">Docker Compose</text>
+    </g>
+
+    <!-- Performance Tagline -->
+    <g transform="translate(0, 280)">
+      <circle cx="8" cy="14" r="5" fill="#10b981" />
+      <text x="22" y="18" font-family="'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="13" fill="#64748b">
+        Fast archive header inspection (.cbz, .zip, .cbr) &amp; image folders
+      </text>
+    </g>
+  </g>
+
+  <!-- Right Visual Presentation: Glass Cards Comparison Mockup -->
+  <g transform="translate(560, 60)" filter="url(#cardShadow)">
+    <!-- Back Card: Original Chapter -->
+    <g transform="translate(0, 20)">
+      <rect width="380" height="150" rx="16" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+      
+      <!-- Card Header -->
+      <circle cx="36" cy="36" r="14" fill="#3b82f6" fill-opacity="0.2" stroke="#3b82f6" stroke-width="1.5" />
+      <text x="36" y="40" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="11" fill="#60a5fa" text-anchor="middle">#1</text>
+      
+      <text x="64" y="34" font-family="'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="14" fill="#ffffff">Manga Title - Chapter 012</text>
+      <text x="64" y="50" font-family="'Segoe UI', Roboto, sans-serif" font-weight="400" font-size="11" fill="#64748b">D:\Manga\Series A\Ch. 12 [Group-A].cbz</text>
+
+      <!-- Stats -->
+      <rect x="24" y="75" width="98" height="48" rx="8" fill="#0f172a" />
+      <text x="73" y="94" font-family="'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="10" fill="#64748b" text-anchor="middle">PAGES</text>
+      <text x="73" y="112" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="14" fill="#38bdf8" text-anchor="middle">24 Pages</text>
+
+      <rect x="132" y="75" width="98" height="48" rx="8" fill="#0f172a" />
+      <text x="181" y="94" font-family="'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="10" fill="#64748b" text-anchor="middle">STATUS</text>
+      <text x="181" y="112" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="13" fill="#10b981" text-anchor="middle">Complete</text>
+
+      <rect x="240" y="75" width="116" height="48" rx="8" fill="#0f172a" />
+      <text x="298" y="94" font-family="'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="10" fill="#64748b" text-anchor="middle">SCANLATOR</text>
+      <text x="298" y="112" font-family="'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="12" fill="#e2e8f0" text-anchor="middle">Group-A</text>
+    </g>
+
+    <!-- Front Overlapping Card: Duplicate / Partial Flagged -->
+    <g transform="translate(30, 160)">
+      <rect width="380" height="175" rx="16" fill="url(#cardGrad)" stroke="#f43f5e" stroke-width="2" />
+      
+      <!-- Flag Badge -->
+      <rect x="250" y="16" width="110" height="24" rx="12" fill="#f43f5e" fill-opacity="0.2" stroke="#f43f5e" stroke-width="1.5" />
+      <text x="305" y="32" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="10" fill="#f43f5e" text-anchor="middle">DUPLICATE DETECTED</text>
+
+      <!-- Card Header -->
+      <circle cx="36" cy="38" r="14" fill="#ef4444" fill-opacity="0.2" stroke="#ef4444" stroke-width="1.5" />
+      <text x="36" y="42" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="11" fill="#f87171" text-anchor="middle">#2</text>
+      
+      <text x="64" y="34" font-family="'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="14" fill="#ffffff">Manga Title - Ch. 012.0</text>
+      <text x="64" y="50" font-family="'Segoe UI', Roboto, sans-serif" font-weight="400" font-size="11" fill="#64748b">/DATA/Media/Manga/Series A/c012 [Group-B]</text>
+
+      <!-- Stats -->
+      <rect x="24" y="80" width="98" height="50" rx="8" fill="#0f172a" />
+      <text x="73" y="100" font-family="'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="10" fill="#64748b" text-anchor="middle">PAGES</text>
+      <text x="73" y="118" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="14" fill="#fb7185" text-anchor="middle">24 Pages</text>
+
+      <rect x="132" y="80" width="98" height="50" rx="8" fill="#0f172a" />
+      <text x="181" y="100" font-family="'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="10" fill="#64748b" text-anchor="middle">MATCH SCORE</text>
+      <text x="181" y="118" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="14" fill="#10b981" text-anchor="middle">100% Match</text>
+
+      <rect x="240" y="80" width="116" height="50" rx="8" fill="#0f172a" />
+      <text x="298" y="100" font-family="'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="10" fill="#64748b" text-anchor="middle">ACTION</text>
+      <text x="298" y="118" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="12" fill="#fbbf24" text-anchor="middle">Review / Prune</text>
+
+      <!-- Mini Resolution Tag -->
+      <text x="24" y="154" font-family="'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="11" fill="#94a3b8">
+        Identical Chapter • Different Scanlator • Duplicate across 2 drives
+      </text>
+    </g>
+  </g>
+</svg>

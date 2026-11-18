@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141829" />
+      <stop offset="50%" stop-color="#1e2442" />
+      <stop offset="100%" stop-color="#0f111d" />
+    </linearGradient>
+
+    <!-- Glass Rim / Glow -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff4b72" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#7c3aed" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.8" />
+    </linearGradient>
+
+    <!-- Page Gradients -->
+    <linearGradient id="pageFront" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e2e8f0" />
+    </linearGradient>
+    <linearGradient id="pageBack" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#cbd5e1" />
+      <stop offset="100%" stop-color="#94a3b8" />
+    </linearGradient>
+    <linearGradient id="mangaRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff2e63" />
+      <stop offset="100%" stop-color="#e11d48" />
+    </linearGradient>
+    <linearGradient id="lensGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.9" />
+    </linearGradient>
+
+    <!-- Glow Filter -->
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="dropShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.55" />
+    </filter>
+  </defs>
+
+  <!-- App Container (CasaOS Rounded Squircle) -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="4" filter="url(#dropShadow)" />
+
+  <!-- Background decorative grid / manga screentone dots -->
+  <g opacity="0.08" fill="#ffffff">
+    <circle cx="80" cy="80" r="4" />
+    <circle cx="120" cy="80" r="4" />
+    <circle cx="160" cy="80" r="4" />
+    <circle cx="200" cy="80" r="4" />
+    <circle cx="80" cy="120" r="4" />
+    <circle cx="120" cy="120" r="4" />
+    <circle cx="160" cy="120" r="4" />
+    <circle cx="200" cy="120" r="4" />
+    <circle cx="320" cy="80" r="4" />
+    <circle cx="360" cy="80" r="4" />
+    <circle cx="400" cy="80" r="4" />
+    <circle cx="440" cy="80" r="4" />
+    <circle cx="320" cy="120" r="4" />
+    <circle cx="360" cy="120" r="4" />
+    <circle cx="400" cy="120" r="4" />
+    <circle cx="440" cy="120" r="4" />
+  </g>
+
+  <!-- Duplicate Shadow / Back Page (Copy 2) -->
+  <g transform="translate(180, 72) rotate(10)" filter="url(#dropShadow)">
+    <rect x="0" y="0" width="168" height="236" rx="14" fill="url(#pageBack)" stroke="#64748b" stroke-width="2" />
+    <!-- Manga chapter header lines -->
+    <rect x="18" y="24" width="70" height="12" rx="4" fill="#94a3b8" />
+    <rect x="18" y="46" width="132" height="6" rx="3" fill="#cbd5e1" />
+    <rect x="18" y="60" width="110" height="6" rx="3" fill="#cbd5e1" />
+    <!-- Manga panel boxes -->
+    <rect x="18" y="78" width="132" height="65" rx="6" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2" />
+    <rect x="18" y="152" width="62" height="65" rx="6" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2" />
+    <rect x="88" y="152" width="62" height="65" rx="6" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2" />
+    <!-- Chapter badge -->
+    <circle cx="140" cy="30" r="14" fill="#ef4444" opacity="0.8" />
+    <text x="140" y="34" font-family="'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="10" fill="#ffffff" text-anchor="middle">c1</text>
+  </g>
+
+  <!-- Primary Page (Copy 1 - In Front) -->
+  <g transform="translate(112, 110)" filter="url(#dropShadow)">
+    <rect x="0" y="0" width="186" height="258" rx="16" fill="url(#pageFront)" stroke="#ffffff" stroke-width="3" />
+    
+    <!-- Manga Header Accent (Japanese Red Sun Motif) -->
+    <rect x="20" y="22" width="80" height="14" rx="4" fill="#0f172a" />
+    <rect x="20" y="44" width="146" height="7" rx="3.5" fill="#94a3b8" />
+    <rect x="20" y="58" width="118" height="7" rx="3.5" fill="#cbd5e1" />
+
+    <!-- Comic Manga Panels -->
+    <rect x="20" y="76" width="146" height="76" rx="8" fill="#1e293b" />
+    <!-- Comic Action lines inside top panel -->
+    <line x1="26" y1="82" x2="65" y2="108" stroke="#38bdf8" stroke-width="2" opacity="0.6" />
+    <line x1="160" y1="82" x2="120" y2="108" stroke="#38bdf8" stroke-width="2" opacity="0.6" />
+    <circle cx="93" cy="114" r="18" fill="url(#mangaRed)" />
+
+    <!-- Bottom Split Panels -->
+    <rect x="20" y="160" width="68" height="76" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" />
+    <rect x="98" y="160" width="68" height="76" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" />
+    
+    <!-- Speed speech bubble -->
+    <path d="M 32 178 Q 45 170 65 178 Q 72 195 50 198 L 40 205 L 44 196 Z" fill="#ffffff" stroke="#0f172a" stroke-width="1.5" />
+    <line x1="38" y1="185" x2="56" y2="185" stroke="#64748b" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Duplicate Badge attached to page -->
+    <rect x="110" y="16" width="56" height="22" rx="11" fill="url(#mangaRed)" />
+    <text x="138" y="31" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="11" fill="#ffffff" text-anchor="middle">CH. 01</text>
+  </g>
+
+  <!-- Duplicate Compare Badge / Scanner Lens (Overlay bottom right) -->
+  <g transform="translate(254, 254)" filter="url(#dropShadow)">
+    <!-- Scanner Glow Ring -->
+    <circle cx="86" cy="86" r="80" fill="url(#bgGrad)" stroke="url(#lensGrad)" stroke-width="8" filter="url(#neonGlow)" opacity="0.35" />
+    <!-- Inner Lens -->
+    <circle cx="86" cy="86" r="72" fill="#151b33" stroke="url(#lensGrad)" stroke-width="6" />
+    <circle cx="86" cy="86" r="62" fill="#0f1426" />
+
+    <!-- Duplicate Icon (Double Interlocking Copy Symbols) -->
+    <g transform="translate(56, 56)">
+      <!-- Left Document Icon -->
+      <rect x="4" y="8" width="30" height="40" rx="5" fill="none" stroke="#38bdf8" stroke-width="4" />
+      <line x1="11" y1="18" x2="25" y2="18" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" />
+      <line x1="11" y1="26" x2="27" y2="26" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" />
+      <line x1="11" y1="34" x2="20" y2="34" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" />
+
+      <!-- Right Overlapping Document Icon (The Duplicate) -->
+      <rect x="22" y="18" width="30" height="40" rx="5" fill="#1e233d" stroke="#f43f5e" stroke-width="4" />
+      <line x1="29" y1="28" x2="43" y2="28" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" />
+      <line x1="29" y1="36" x2="45" y2="36" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" />
+      <line x1="29" y1="44" x2="38" y2="44" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" />
+
+      <!-- Equal / Match Symbol Badge -->
+      <circle cx="48" cy="14" r="14" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+      <path d="M 43 14 L 53 14 M 43 18 L 53 18" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" />
+    </g>
+
+    <!-- Lens Handle / Scan Flare -->
+    <path d="M 140 140 L 176 176" stroke="url(#borderGrad)" stroke-width="14" stroke-linecap="round" />
+  </g>
+
+  <!-- Subtle bottom highlight tag -->
+  <text x="256" y="462" font-family="'Segoe UI', Roboto, Helvetica, sans-serif" font-weight="800" font-size="19" letter-spacing="3" fill="#94a3b8" text-anchor="middle" opacity="0.9">MANGA DUP FINDER</text>
+</svg>

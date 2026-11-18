@@ -1,0 +1,51 @@
+# CasaOS App Specification & Docker Compose Definition
+# Project: Manga & Doujinshi Duplicate Chapter Finder
+version: "3.8"
+
+services:
+  manga-dup-finder:
+    image: manga-dup-finder:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: manga-dup-finder
+    restart: "no"
+    environment:
+      - TZ=UTC
+      - SCAN_PATHS=/media/manga,/media/doujinshi
+      - OUTPUT_DIR=/reports
+      - DETECT_PARTIALS=true
+      - MIN_PAGE_RATIO=0.6
+      - REPORT_FORMAT=html,json,csv
+    volumes:
+      # Map CasaOS storage paths (Adjust to your CasaOS drive paths, e.g., /DATA/Media/Manga)
+      - /DATA/Media/Manga:/media/manga:ro
+      - /DATA/Media/Doujinshi:/media/doujinshi:ro
+      # Report output folder
+      - ./reports:/reports
+      # Optional external configuration file
+      - ./config.yaml:/app/config.yaml:ro
+    labels:
+      icon: "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/icon.png"
+
+# CasaOS App Store Metadata & Dashboard UI Settings
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+    - arm
+  main: manga-dup-finder
+  description:
+    en_us: "Scan your manga and doujinshi libraries across multiple storage paths to detect exact chapter duplicates, different scanlation team releases, and partial or fractional chapters (e.g. Ch 12.1 vs Ch 12, missing pages, incomplete releases)."
+  tagline:
+    en_us: "Manga & Doujinshi Duplicate Chapter Finder"
+  developer: "Alex"
+  author: "Alex"
+  icon: "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/icon.png"
+  thumbnail: "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/banner.png"
+  screenshot_link:
+    - "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/banner.png"
+  title:
+    en_us: "Manga Dup Finder"
+  category: "Utilities"
+  index: ""

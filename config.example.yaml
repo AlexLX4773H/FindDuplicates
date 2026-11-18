@@ -1,0 +1,55 @@
+# Configuration for Manga & Doujinshi Duplicate Finder
+
+# Paths to scan: Supports Windows paths, UNC network shares, and Linux/CasaOS paths
+scan_paths:
+  # Linux / CasaOS Paths:
+  - "/DATA/Media/Manga"
+  - "/DATA/Media/Doujinshi"
+
+  # Windows Local or Network Share Paths (uncomment on Windows):
+  # - "G:\\LX\\Manga"
+  # - "D:\\Manga Collections"
+  # - "\\\\192.168.1.100\\Media\\Doujinshi"
+
+detection:
+  # Detect fractional/partial chapters (e.g. Ch 10.1 vs Ch 10)
+  detect_fractional_chapters: true
+
+  # Detect chapters with suspiciously low page counts compared to duplicates (e.g. < 60% of max pages)
+  detect_incomplete_pages: true
+  min_page_ratio: 0.60
+
+  # Keywords indicating partial or sample releases
+  partial_keywords:
+    - "incomplete"
+    - "sample"
+    - "preview"
+    - "partial"
+    - "missing"
+    - "tbr"
+
+  # Archive extensions to inspect
+  supported_archives:
+    - ".cbz"
+    - ".zip"
+    - ".cbr"
+    - ".rar"
+
+  # Image extensions inside loose folders
+  supported_images:
+    - ".jpg"
+    - ".jpeg"
+    - ".png"
+    - ".webp"
+    - ".avif"
+
+output:
+  # Directory where scan results will be saved
+  report_directory: "./reports"
+
+  # Export formats: 'terminal', 'json', 'csv', 'html'
+  formats:
+    - "terminal"
+    - "html"
+    - "json"
+    - "csv"
