@@ -21,7 +21,11 @@ Large manga and doujinshi collections are plagued by duplicate downloads, multip
      - **Image-Based Jobs**: Deep visual inspection utilizing perceptual hashing (dHash/pHash), page count audits, and resolution comparisons to definitively detect identical artwork across different names or translations.
 4. **Offline Tree Dump Ingestion**:
    - Ability to run deduplication directly against exported Windows `tree /a` or `tree /f` text dumps (such as the files in `sample_data/`) without needing physical access to network storage or NAS shares.
-5. **Cross-Platform & Home Server Ready**:
+5. **Strict Read-Only Job Architecture & Pop-Up Confirmation Policy**:
+   - **Zero Automated File Deletion**: Background scan jobs and CLI runners are strictly read-only report creators. They never delete, move, or modify any files on the filesystem.
+   - **Dedicated Report Resolution Window**: All resolutions happen exclusively from an interactive review window where the user inspects duplicate comparisons side-by-side.
+   - **Mandatory Pop-Up Confirmation**: Prior to relocating or removing any files, a prominent confirmation dialog appears displaying an itemized list of all affected files, requiring an explicit confirmation checkbox and dry-run validation.
+6. **Cross-Platform & Home Server Ready**:
    - Native support for Windows drive letters (`G:\...`, UNC paths `\\NAS\share`) and Linux mount paths (`/DATA/Media/...`).
    - CasaOS and Docker integration with custom icons, banners, and dashboard metadata.
 

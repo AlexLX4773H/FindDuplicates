@@ -108,6 +108,90 @@ def get_casaos_compose():
     return {"content": "# docker-compose.yml not found"}
 
 
+@app.get("/api/reports")
+def list_reports():
+    """Lists saved reports in the reports directory."""
+    cfg = load_config()
+    rep_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
+    reports = []
+    if rep_dir.exists():
+        for f in sorted(rep_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            reports.append({
+                "filename": f.name,
+                "path": str(f),
+                "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+                "size_bytes": f.stat().st_size
+            })
+    return {"reports": reports}
+
+
+class LoadReportPayload(BaseModel):
+    filename: str
+
+
+@app.post("/api/reports/load")
+def load_report(payload: LoadReportPayload):
+    """Loads a saved JSON report into active state for interactive review."""
+    import json
+    cfg = load_config()
+    rep_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
+    target_file = rep_dir / payload.filename
+    if not target_file.exists():
+        return JSONResponse(status_code=400, content={"error": f"Report not found: {payload.filename}"})
+
+    with open(target_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Populate STATE from loaded report
+    dupes_raw = data.get("duplicates", [])
+    manga_dupes = []
+    doujin_dupes = []
+
+    for d in dupes_raw:
+        grp = DuplicateGroup(
+            group_id=d.get("group_id", ""),
+            target_type=d.get("target_type", ""),
+            title=d.get("title", ""),
+            sub_title=d.get("sub_title", ""),
+            category=d.get("category", ""),
+            items=d.get("items", []),
+            recommendation=d.get("recommendation", ""),
+            recommended_keep_path=d.get("recommended_keep_path", ""),
+            hamming_distance=d.get("hamming_distance")
+        )
+        if grp.target_type == "manga":
+            manga_dupes.append(grp)
+        else:
+            doujin_dupes.append(grp)
+
+    parts_raw = data.get("partials", [])
+    partials = []
+    for p in parts_raw:
+        partials.append(
+            PartialIssue(
+                issue_id=p.get("issue_id", ""),
+                series_name=p.get("series_name", ""),
+                issue_type=p.get("issue_type", ""),
+                description=p.get("description", ""),
+                affected_items=p.get("affected_items", [])
+            )
+        )
+
+    STATE["manga_duplicates"] = manga_dupes
+    STATE["doujinshi_duplicates"] = doujin_dupes
+    STATE["manga_partials"] = partials
+    STATE["total_scanned"] = data.get("summary", {}).get("total_scanned", len(manga_dupes) + len(doujin_dupes))
+    STATE["status_message"] = f"Report '{payload.filename}' loaded into Resolution Window. Ready for review."
+
+    return {
+        "status": "loaded",
+        "filename": payload.filename,
+        "manga_duplicates_count": len(manga_dupes),
+        "doujinshi_duplicates_count": len(doujin_dupes),
+        "partials_count": len(partials)
+    }
+
+
 @app.get("/api/duplicates")
 def get_duplicates(target: str = Query("all")):
     """Returns duplicate groups filtered by target ('manga', 'doujinshi', or 'all')."""

@@ -61,6 +61,8 @@ def run_manga_job(args, cfg):
     export_csv(duplicates, str(output_dir / "manga_duplicates.csv"))
     export_html(duplicates, partials, len(chapters), str(output_dir / "manga_duplicates.html"))
     print(f"[+] Reports saved to: {output_dir}")
+    print("[INFO] Safety Guarantee: Scans run in strictly READ-ONLY mode. No files were modified, moved, or deleted.")
+    print("[INFO] To review duplicates and resolve them, open the Web Dashboard at http://localhost:8765")
 
 
 def run_doujinshi_job(args, cfg):
@@ -110,6 +112,8 @@ def run_doujinshi_job(args, cfg):
     export_csv(duplicates, str(output_dir / "doujinshi_duplicates.csv"))
     export_html(duplicates, [], len(works), str(output_dir / "doujinshi_duplicates.html"))
     print(f"[+] Reports saved to: {output_dir}")
+    print("[INFO] Safety Guarantee: Scans run in strictly READ-ONLY mode. No files were modified, moved, or deleted.")
+    print("[INFO] To review duplicates and resolve them, open the Web Dashboard at http://localhost:8765")
 
 
 def run_parse_tree_job(args, cfg):
@@ -145,6 +149,8 @@ def run_parse_tree_job(args, cfg):
         export_html(duplicates, [], len(items), str(output_dir / f"{target_file.stem}_report.html"))
 
     print(f"[+] Offline report saved to: {output_dir}")
+    print("[INFO] Safety Guarantee: Scans run in strictly READ-ONLY mode. No files were modified, moved, or deleted.")
+    print("[INFO] To review duplicates and resolve them, open the Web Dashboard at http://localhost:8765")
 
 
 def run_server_job(args, cfg):
