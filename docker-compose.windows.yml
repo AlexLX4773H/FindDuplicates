@@ -10,15 +10,20 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: manga-dup-finder-windows
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
     environment:
       - SCAN_PATHS=/media/manga,/media/doujinshi
       - OUTPUT_DIR=/reports
+      - ARCHIVE_DIR=/archive
       - DETECT_PARTIALS=true
       - REPORT_FORMAT=html,json,csv
     volumes:
       # Map Windows local drives / folders to container POSIX mount paths
-      # e.g., G:\LX\Manga -> /media/manga (read-only)
+      # Adjust to your paths: e.g., G:/LX/Manga -> /media/manga (read-only)
       - "G:/LX/Manga:/media/manga:ro"
       - "G:/LX/Doujinshi:/media/doujinshi:ro"
       - "./reports:/reports"
+      - "./archive:/archive"
       - "./config.example.yaml:/app/config.yaml:ro"

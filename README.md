@@ -12,27 +12,34 @@
   <a href="#"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License"></a>
 </p>
 
-An intelligent Python scanner and deduplication engine designed to traverse manga and doujinshi libraries across single or multiple directory structures (Windows local drives, SMB network shares, and Linux/CasaOS storage mounts).
+An intelligent, multi-job deduplication, verification, and collection management engine for digital **Manga, Manhwa, Webtoon, and Doujinshi (H)** libraries across single or multiple directory structures (Windows local drives, SMB network shares, and Linux/CasaOS storage mounts).
 
-It accurately identifies **duplicate chapters**, **alternative scanlation releases**, and **partial/fractional releases** (e.g. `Ch 10.1`, missing page counts, or incomplete samples).
+Includes a modern **Interactive Web Dashboard** inside Docker and CasaOS allowing you to view visual duplicate reports, compare releases side-by-side, and **click-to-confirm what stays, what moves to archive, or what gets deleted**.
 
 ---
 
 ## 🌟 Key Features
 
-- 🔍 **Duplicate Chapter Detection**: Groups chapters by series name and chapter number across separate directories and storage pools.
-- 🧩 **Partial & Fractional Chapter Detection**:
-  - Highlights split releases (e.g. `Ch. 12.1`, `Ch. 12.2`) when a full `Ch. 12` already exists or vice-versa.
-  - Flags incomplete chapters based on comparative page counts (e.g. sample releases with < 60% of peer page counts).
-  - Detects keywords such as `[Incomplete]`, `[Sample]`, `[Preview]`, `[Missing]`.
-- 🗂️ **Universal Archive & Folder Support**: Inspects both loose image folders (`.jpg`, `.png`, `.webp`, `.avif`) and comic archives (`.cbz`, `.zip`) with zero-extraction header reading.
-- 💻 **Cross-Platform Path Support**:
-  - Windows paths: `G:\LX\Manga`, `\\192.168.1.100\Storage\Manga`.
-  - Linux & CasaOS paths: `/DATA/Media/Manga`, `/DATA/Media/Doujinshi`.
+- 🖥️ **Interactive Web Dashboard (Docker & CasaOS)**:
+  - Fast, responsive web UI served on port `8765`.
+  - Compare duplicate releases side-by-side with scanlator tags, page counts, resolution badges, and AI retention recommendations.
+  - One-click actions per release: **Keep**, **Move to Archive**, or **Delete**.
+  - **Batch Actions**: "Auto-Select Best" automatically marks the highest quality copy to stay and duplicates to be archived.
+  - **Safe Execution Engine**: Includes Dry-Run mode by default and full audit logging.
+- 📚 **Targeted Manga Deduplication (Intra-Series)**:
+  - Scans within each manga title to detect duplicate chapters, competing scanlation releases, and split fractional sub-chapters (e.g. `Ch 10.1`, `Ch 10.2` coexisting with `Ch 10`).
+  - Cleans download scraper hex hashes (`Chapter 10_48a245` $\rightarrow$ `Chapter 10`).
+- 🌸 **Global Doujinshi Deduplication (Cross-Directory)**:
+  - Scans across all staging roots (`000 NEW`, `TempD`, `TempT`, `ORIGINAL`, `Old`, archives).
+  - Automatically collapses leaf chapter subfolders (`_chapter`, `Chapter`, `<artist>_chapter`) into their parent doujinshi works.
+  - Matches by Circle/Artist, Event, Japanese/English dual titles, and tags (`[Decensored]`, `[Digital]`).
+- 👁️ **Visual Perceptual Hashing (dHash / pHash)**:
+  - Compares Page 1/Cover, Mid-page, and Last-page hashes to verify identical artwork across different scanlations or translated titles.
+- 📂 **Offline Tree Dump Parser**:
+  - Ingests raw text files generated via `tree /a` or `tree /f` (like `sample_data/Manga/manga.txt` or `sample_data/H/h_new_b2.txt`) for instant analysis without mounting physical storage.
 - 🐳 **CasaOS & Docker Native**:
-  - Includes `x-casaos` integration in `docker-compose.yml` for 1-click CasaOS App Store installation.
-  - Includes custom icons and banners in `assets/`.
-- 📊 **Rich Reporting**: Outputs summary results directly to the terminal, and exports structured JSON, CSV, and interactive HTML dashboards.
+  - Pre-configured `x-casaos` integration in `docker-compose.yml` for 1-click install in CasaOS App Store.
+  - Custom vector icons, app badges, and store banners in `assets/`.
 
 ---
 
@@ -51,80 +58,84 @@ Find Duplicates/
 ├── assets/                         # CasaOS icons, banners, and vector sprites
 │   ├── icon.svg                    # Scalable vector icon
 │   ├── icon.png                    # 512x512 CasaOS App Store icon
-│   ├── icon-256.png                # 256x256 sprite
-│   ├── icon-128.png                # 128x128 sprite
-│   ├── icon-64.png                 # 64x64 sprite
 │   ├── banner.svg                  # Scalable vector banner
 │   └── banner.png                  # 1024x500 CasaOS App Store banner
-├── scripts/
-│   └── generate_assets.py          # Asset & sprite generation utility
 └── src/
     ├── __init__.py
     ├── config.py                   # Path normalization & YAML loader
-    ├── scanner.py                  # Multi-threaded filesystem & archive walker
-    ├── parser.py                   # Regex tokenizers for manga/doujinshi naming
-    ├── detector.py                 # Duplicate & partial chapter analysis logic
-    ├── reporter.py                 # Terminal tables, JSON, CSV & HTML reports
-    └── main.py                     # CLI entrypoint
+    ├── models.py                   # Data classes (ChapterItem, DoujinshiWork, DuplicateGroup)
+    ├── parser.py                   # Heuristic tokenizers & tree dump parsers
+    ├── scanner.py                  # Real filesystem & archive walker (.cbz, .zip)
+    ├── detector.py                 # Intra-series & global cross-directory duplicate engines
+    ├── image_hasher.py             # Visual perceptual hashing & page extractors
+    ├── actions.py                  # Safe file execution engine (Keep, Move, Delete, Dry-Run)
+    ├── reporter.py                 # Terminal tables, JSON, CSV & standalone HTML dashboards
+    ├── main.py                     # Unified CLI & server runner
+    └── web/
+        ├── app.py                  # FastAPI backend server
+        └── templates/
+            └── index.html          # Interactive dark-mode dashboard
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Local CLI Execution (Windows or Linux)
+### 1. Interactive Web Dashboard (Local or Docker)
 
-#### Install Dependencies:
+#### Run locally:
 ```bash
 pip install -r requirements.txt
+python -m src.main server --port 8765
 ```
+Open **`http://localhost:8765`** in your browser.
 
-#### Scan via Command Line:
+#### Run with Docker / CasaOS:
 ```bash
-# Windows
-python -m src.main --scan "G:\LX\Manga" --scan "D:\Manga Collections"
+# Windows Docker Desktop
+docker compose -f docker-compose.windows.yml up --build
 
 # Linux / CasaOS
-python -m src.main --scan "/DATA/Media/Manga" --scan "/DATA/Media/Doujinshi"
+docker compose up -d
 ```
+Access the dashboard at `http://<your-server-ip>:8765`.
 
-#### Scan using `config.yaml`:
+---
+
+### 2. Specialized CLI Jobs
+
+#### Manga Intra-Series Scanner:
 ```bash
-cp config.example.yaml config.yaml
-# Edit config.yaml with your scan paths, then run:
-python -m src.main --config config.yaml
+# Name-based fast scan
+python -m src.main manga --by name --scan "G:\LX\Manga"
+
+# Image perceptual hash verification
+python -m src.main manga --by image --scan "G:\LX\Manga"
 ```
 
----
+#### Doujinshi Global Cross-Directory Scanner:
+```bash
+# Name-based global scan
+python -m src.main doujinshi --by name --scan "G:\LX\H" --scan "G:\LX\H_Staging"
 
-## 🐳 Docker & CasaOS Deployment
-
-### Option A: CasaOS on Ubuntu Server
-
-1. Open your CasaOS Dashboard.
-2. Go to **App Store** -> **Custom Install** -> Click **Import** (top right).
-3. Paste the contents of [`docker-compose.yml`](docker-compose.yml) or import this repo.
-4. Set your volume paths to match your CasaOS storage drives (e.g. `/DATA/Media/Manga`).
-5. Click **Submit** to run.
-
-### Option B: Windows Docker Desktop
-
-Run with the Windows-specific compose file:
-```powershell
-docker compose -f docker-compose.windows.yml up --build
+# Image cover perceptual hash clustering
+python -m src.main doujinshi --by image --scan "G:\LX\H"
 ```
 
+#### Offline Tree Dump Ingestion:
+Instantly parse and detect duplicates from text files generated via `tree /a` or `tree /f`:
+```bash
+# Analyze manga tree dump
+python -m src.main parse-tree --file "sample_data/Manga/manga.txt"
+
+# Analyze doujinshi tree dump
+python -m src.main parse-tree --file "sample_data/H/h_new_b2.txt"
+```
+
+Reports are automatically generated and saved to `./reports` in HTML, JSON, and CSV formats.
+
 ---
 
-## 🎨 CasaOS Icons & Sprites
+## 📖 Architecture & Heuristics
 
-The `assets/` directory provides app store ready graphics conforming to CasaOS design guidelines:
-- `assets/icon.png`: 512x512 high-resolution app icon.
-- `assets/icon.svg`: Vector icon.
-- `assets/banner.png`: 1024x500 preview banner for the CasaOS app card.
-
----
-
-## 📖 Architecture & Next Steps
-
-See [`PLAN.md`](PLAN.md) for full architectural documentation, heuristic matrices, and roadmap phases.
+See [`PLAN.md`](PLAN.md) for full architectural documentation, regex heuristics, and perceptual hash algorithms.

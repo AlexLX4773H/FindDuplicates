@@ -24,8 +24,11 @@ COPY config.example.yaml ./config.yaml
 COPY assets/ ./assets/
 
 # Default scan mount points inside container
-VOLUME ["/media", "/reports"]
+VOLUME ["/media", "/reports", "/archive"]
 
-# Default command runs CLI scanner with mounted config
+# Expose interactive dashboard port
+EXPOSE 8765
+
+# Default command runs Interactive Web UI Server
 ENTRYPOINT ["python", "-m", "src.main"]
-CMD ["--config", "/app/config.yaml"]
+CMD ["server", "--host", "0.0.0.0", "--port", "8765"]

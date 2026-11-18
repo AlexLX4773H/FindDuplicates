@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FindDuplicates Interactive Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .glass { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass-card { background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col">
+
+  <!-- Top Navbar -->
+  <nav class="glass sticky top-0 z-40 border-b border-slate-800 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 via-pink-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-violet-500/20">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-extrabold bg-gradient-to-r from-violet-300 via-pink-300 to-cyan-300 bg-clip-text text-transparent">
+          FindDuplicates Dashboard
+        </h1>
+        <p class="text-[11px] text-slate-400" id="statusMessage">Connecting to engine...</p>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="flex items-center gap-2 text-xs">
+      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-400">Scanned:</span>
+        <span id="statScanned" class="font-bold text-violet-400">0</span>
+      </div>
+      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-400">Manga Dupes:</span>
+        <span id="statMangaDupes" class="font-bold text-pink-400">0</span>
+      </div>
+      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-400">Doujinshi Dupes:</span>
+        <span id="statDoujinDupes" class="font-bold text-cyan-400">0</span>
+      </div>
+      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
+        <span class="text-slate-400">Partials:</span>
+        <span id="statPartials" class="font-bold text-amber-400">0</span>
+      </div>
+      <button onclick="openConfirmModal()" id="btnReviewActions"
+              class="ml-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 font-bold text-xs shadow-md shadow-violet-600/30 transition flex items-center gap-1.5">
+        <span>⚡ Review & Confirm</span>
+        <span id="actionBadge" class="bg-white/20 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+
+    <!-- Tab Bar & Toolbar -->
+    <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 glass p-4 rounded-2xl">
+      <!-- Tabs -->
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
+        <button onclick="switchTab('manga')" id="tab-manga" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 text-white shadow-sm flex items-center gap-1.5">
+          <span>📚 Manga (Intra)</span>
+        </button>
+        <button onclick="switchTab('doujinshi')" id="tab-doujinshi" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+          <span>🌸 Doujinshi (Global)</span>
+        </button>
+        <button onclick="switchTab('partials')" id="tab-partials" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+          <span>⚠️ Partials / Splits</span>
+        </button>
+        <button onclick="switchTab('samples')" id="tab-samples" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+          <span>📂 Load Sample Trees</span>
+        </button>
+      </div>
+
+      <!-- Quick Actions & Search -->
+      <div class="flex items-center gap-3">
+        <input id="searchInput" type="text" placeholder="Filter current view..."
+               class="bg-slate-900 border border-slate-700 px-3.5 py-1.5 rounded-xl text-xs focus:outline-none focus:border-violet-500 w-48 md:w-64">
+        <button onclick="autoSelectRecommended()" title="Automatically select keep for the best copy and move to archive for duplicates"
+                class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">
+          ✨ Auto-Select Best
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab Content: Sample Trees Loader -->
+    <div id="samplesView" class="hidden glass p-6 rounded-2xl space-y-4">
+      <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+        <span>⚡ Quick Ingestion from Sample Data Dumps</span>
+      </h2>
+      <p class="text-xs text-slate-400">
+        Run instant offline duplicate detection directly against the tree dump files located in your workspace without needing NAS drives mounted:
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
+          <div>
+            <span class="text-[10px] uppercase font-bold text-violet-400 tracking-wider">Manga Hierarchy (Fixed)</span>
+            <h3 class="text-sm font-bold text-slate-200 mt-1">sample_data/Manga/manga.txt</h3>
+            <p class="text-xs text-slate-400 mt-1">47,707 lines covering Manga_1, Manga_A2, Manga_CBZ, Manhwa_CBZ.</p>
+          </div>
+          <button onclick="parseSampleTree('sample_data/Manga/manga.txt')" class="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-bold transition">
+            Parse Manga Tree
+          </button>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
+          <div>
+            <span class="text-[10px] uppercase font-bold text-pink-400 tracking-wider">Doujinshi Roots (Global)</span>
+            <h3 class="text-sm font-bold text-slate-200 mt-1">sample_data/H/h_new_b2.txt</h3>
+            <p class="text-xs text-slate-400 mt-1">13,068 lines spanning 000 NEW, staging folders, and archives.</p>
+          </div>
+          <button onclick="parseSampleTree('sample_data/H/h_new_b2.txt')" class="w-full py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-xs font-bold transition">
+            Parse Doujinshi (h_new_b2)
+          </button>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
+          <div>
+            <span class="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Doujinshi Cross-Directory</span>
+            <h3 class="text-sm font-bold text-slate-200 mt-1">sample_data/H/h_temp_d.txt</h3>
+            <p class="text-xs text-slate-400 mt-1">13,087 lines spanning TempD and cross-archive works.</p>
+          </div>
+          <button onclick="parseSampleTree('sample_data/H/h_temp_d.txt')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-bold transition">
+            Parse Doujinshi (h_temp_d)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cards Container -->
+    <div id="cardsContainer" class="space-y-4">
+      <div class="p-12 text-center text-slate-500 glass rounded-2xl">
+        Loading duplicate groups...
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Interactive Action Confirmation Modal -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div class="glass max-w-3xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+          <h2 class="text-lg font-extrabold text-slate-100 flex items-center gap-2">
+            <span>⚡ Confirm & Execute File Actions</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Review items marked for archive or deletion before execution.</p>
+        </div>
+        <button onclick="closeConfirmModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
+      </div>
+
+      <!-- Action Counts Summary -->
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div class="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60">
+          <div class="text-xs text-emerald-400 font-semibold">Keep (Stay)</div>
+          <div id="modalKeepCount" class="text-xl font-bold text-emerald-300 mt-1">0</div>
+        </div>
+        <div class="p-3 rounded-xl bg-amber-950/40 border border-amber-800/60">
+          <div class="text-xs text-amber-400 font-semibold">Move to Archive</div>
+          <div id="modalMoveCount" class="text-xl font-bold text-amber-300 mt-1">0</div>
+        </div>
+        <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60">
+          <div class="text-xs text-rose-400 font-semibold">Delete</div>
+          <div id="modalDeleteCount" class="text-xl font-bold text-rose-300 mt-1">0</div>
+        </div>
+      </div>
+
+      <!-- Destination Configuration -->
+      <div class="space-y-3">
+        <label class="block text-xs font-semibold text-slate-300">Target Archive Root Directory:</label>
+        <input id="archiveDirInput" type="text" value="./archive"
+               class="w-full bg-slate-900 border border-slate-700 px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-violet-500 font-mono">
+        <p class="text-[11px] text-slate-500">Duplicates marked 'Move to Archive' will be safely relocated under this directory, preserving their parent series structure.</p>
+      </div>
+
+      <!-- Safety Dry Run Toggle -->
+      <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+        <div>
+          <div class="text-xs font-bold text-slate-200">Dry Run Mode (Simulate Only)</div>
+          <div class="text-[11px] text-slate-400">Validate operations without making physical filesystem changes.</div>
+        </div>
+        <input id="dryRunToggle" type="checkbox" checked class="w-5 h-5 accent-violet-600 cursor-pointer">
+      </div>
+
+      <!-- Execution Log Container -->
+      <div id="executionResultBox" class="hidden p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono max-h-48 overflow-y-auto space-y-1.5 custom-scrollbar"></div>
+
+      <!-- Footer Buttons -->
+      <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
+        <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300">
+          Cancel
+        </button>
+        <button onclick="executeActionPlan()" id="btnExecutePlan" class="px-5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-xs font-bold shadow-lg shadow-violet-600/30">
+          Execute Actions
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let activeTab = 'manga';
+    let duplicatesData = [];
+    let partialsData = [];
+    // Key: item_path -> action: 'keep' | 'move_archive' | 'delete' | 'skip'
+    let selectedActions = {};
+
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        document.getElementById('statusMessage').innerText = data.status_message || 'Ready';
+        document.getElementById('statScanned').innerText = data.total_scanned;
+        document.getElementById('statMangaDupes').innerText = data.manga_duplicates_count;
+        document.getElementById('statDoujinDupes').innerText = data.doujinshi_duplicates_count;
+        document.getElementById('statPartials').innerText = data.manga_partials_count;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function loadData() {
+      try {
+        const [dupesRes, partsRes] = await Promise.all([
+          fetch('/api/duplicates?target=all'),
+          fetch('/api/partials')
+        ]);
+        duplicatesData = await dupesRes.json();
+        partialsData = await partsRes.json();
+        renderActiveView();
+        updateActionBadge();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('bg-violet-600', 'text-white');
+        b.classList.add('bg-slate-900', 'text-slate-300');
+      });
+      const activeBtn = document.getElementById(`tab-${tab}`);
+      if (activeBtn) {
+        activeBtn.classList.remove('bg-slate-900', 'text-slate-300');
+        activeBtn.classList.add('bg-violet-600', 'text-white');
+      }
+
+      const samplesView = document.getElementById('samplesView');
+      if (tab === 'samples') {
+        samplesView.classList.remove('hidden');
+        document.getElementById('cardsContainer').classList.add('hidden');
+      } else {
+        samplesView.classList.add('hidden');
+        document.getElementById('cardsContainer').classList.remove('hidden');
+        renderActiveView();
+      }
+    }
+
+    function renderActiveView() {
+      const container = document.getElementById('cardsContainer');
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      container.innerHTML = '';
+
+      if (activeTab === 'partials') {
+        const filtered = partialsData.filter(p => !query || p.series_name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query));
+        if (filtered.length === 0) {
+          container.innerHTML = '<div class="p-12 text-center text-slate-500 glass rounded-2xl">No partial chapter issues match filter.</div>';
+          return;
+        }
+        filtered.forEach(p => {
+          const card = document.createElement('div');
+          card.className = 'glass p-5 rounded-2xl border-l-4 border-l-amber-500 space-y-2';
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-bold text-slate-100">${p.series_name}</h3>
+              <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">${p.issue_type}</span>
+            </div>
+            <p class="text-xs text-slate-300">${p.description}</p>
+          `;
+          container.appendChild(card);
+        });
+        return;
+      }
+
+      const filtered = duplicatesData.filter(g => {
+        if (activeTab === 'manga' && g.target_type !== 'manga') return false;
+        if (activeTab === 'doujinshi' && g.target_type !== 'doujinshi') return false;
+        if (query) {
+          const tMatch = (g.title || '').toLowerCase().includes(query);
+          const sMatch = (g.sub_title || '').toLowerCase().includes(query);
+          const itMatch = g.items.some(it => (it.raw_name || it.work_name || '').toLowerCase().includes(query));
+          if (!tMatch && !sMatch && !itMatch) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="p-12 text-center text-slate-500 glass rounded-2xl">No ${activeTab} duplicates found. Try loading a sample tree or running a scan.</div>`;
+        return;
+      }
+
+      filtered.forEach(g => {
+        const card = document.createElement('div');
+        card.className = 'glass p-5 rounded-2xl space-y-4';
+
+        let itemsHtml = g.items.map(it => {
+          const name = it.raw_name || it.work_name || '';
+          const path = it.file_path || name;
+          const group = it.scanlator_group || it.scanlator || 'Uncredited';
+          const isKeeper = (path === g.recommended_keep_path || name === g.recommended_keep_path);
+
+          // Get current selected action or default to recommendation
+          if (!selectedActions[path]) {
+            selectedActions[path] = isKeeper ? 'keep' : 'move_archive';
+          }
+          const curAction = selectedActions[path];
+
+          return `
+            <div class="flex flex-col md:flex-row md:items-center justify-between p-3.5 rounded-xl border ${curAction === 'keep' ? 'bg-emerald-950/20 border-emerald-800/50' : curAction === 'delete' ? 'bg-rose-950/20 border-rose-800/50' : 'bg-amber-950/20 border-amber-800/50'} text-xs gap-3">
+              <div class="space-y-1 min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-bold text-slate-200 text-sm">${name}</span>
+                  ${isKeeper ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] border border-emerald-500/30">RECOMMENDED BEST</span>' : ''}
+                  ${it.is_hq ? '<span class="px-1.5 py-0.2 rounded bg-violet-900/50 text-violet-300 font-semibold text-[10px]">HQ</span>' : ''}
+                  ${it.is_fixed ? '<span class="px-1.5 py-0.2 rounded bg-cyan-900/50 text-cyan-300 font-semibold text-[10px]">FIXED</span>' : ''}
+                  ${it.is_decensored ? '<span class="px-1.5 py-0.2 rounded bg-pink-900/50 text-pink-300 font-semibold text-[10px]">DECENSORED</span>' : ''}
+                  ${it.is_digital ? '<span class="px-1.5 py-0.2 rounded bg-blue-900/50 text-blue-300 font-semibold text-[10px]">DIGITAL</span>' : ''}
+                </div>
+                <div class="text-slate-400 font-mono text-[11px] truncate" title="${path}">${path}</div>
+                <div class="flex items-center gap-3 text-slate-400 text-[11px] pt-0.5">
+                  <span>Group: <strong class="text-slate-300">${group}</strong></span>
+                  ${it.page_count ? `<span>Pages: <strong class="text-slate-300">${it.page_count}</strong></span>` : ''}
+                  ${it.volume_root ? `<span>Volume: <strong class="text-slate-300">${it.volume_root}</strong></span>` : ''}
+                </div>
+              </div>
+
+              <!-- Action Selector Buttons -->
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="setItemAction('${path.replace(/\\/g, '\\\\')}', 'keep')"
+                        class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'keep' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
+                  Keep
+                </button>
+                <button onclick="setItemAction('${path.replace(/\\/g, '\\\\')}', 'move_archive')"
+                        class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'move_archive' ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
+                  Archive
+                </button>
+                <button onclick="setItemAction('${path.replace(/\\/g, '\\\\')}', 'delete')"
+                        class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'delete' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
+                  Delete
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        card.innerHTML = `
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded tracking-wider ${g.target_type === 'manga' ? 'bg-violet-900/60 text-violet-300 border border-violet-700' : 'bg-pink-900/60 text-pink-300 border border-pink-700'}">${g.target_type.toUpperCase()}</span>
+              <h3 class="text-base font-bold text-slate-100 inline-block ml-2">${g.title} <span class="text-slate-400 font-normal">(${g.sub_title})</span></h3>
+            </div>
+            <span class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">${g.category}</span>
+          </div>
+          <p class="text-xs text-slate-300 bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60 flex items-center gap-1.5">
+            <span class="text-cyan-400 font-bold">ℹ️ Recommendation:</span>
+            <span>${g.recommendation}</span>
+          </p>
+          <div class="space-y-2">${itemsHtml}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function setItemAction(itemPath, action) {
+      selectedActions[itemPath] = action;
+      renderActiveView();
+      updateActionBadge();
+    }
+
+    function autoSelectRecommended() {
+      duplicatesData.forEach(g => {
+        g.items.forEach(it => {
+          const path = it.file_path || it.raw_name || it.work_name;
+          const isKeeper = (path === g.recommended_keep_path || (it.raw_name || '') === g.recommended_keep_path);
+          selectedActions[path] = isKeeper ? 'keep' : 'move_archive';
+        });
+      });
+      renderActiveView();
+      updateActionBadge();
+    }
+
+    function updateActionBadge() {
+      const moveCount = Object.values(selectedActions).filter(a => a === 'move_archive').length;
+      const deleteCount = Object.values(selectedActions).filter(a => a === 'delete').length;
+      const totalPending = moveCount + deleteCount;
+      document.getElementById('actionBadge').innerText = totalPending;
+    }
+
+    function openConfirmModal() {
+      let keep = 0, move = 0, del = 0;
+      Object.values(selectedActions).forEach(a => {
+        if (a === 'keep') keep++;
+        if (a === 'move_archive') move++;
+        if (a === 'delete') del++;
+      });
+      document.getElementById('modalKeepCount').innerText = keep;
+      document.getElementById('modalMoveCount').innerText = move;
+      document.getElementById('modalDeleteCount').innerText = del;
+      document.getElementById('executionResultBox').classList.add('hidden');
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmModal').classList.add('hidden');
+    }
+
+    async function executeActionPlan() {
+      const dryRun = document.getElementById('dryRunToggle').checked;
+      const archiveDir = document.getElementById('archiveDirInput').value;
+      const actionsList = Object.entries(selectedActions).map(([path, act]) => ({
+        item_path: path,
+        action: act,
+        reason: 'User confirmed via interactive UI'
+      }));
+
+      const resBox = document.getElementById('executionResultBox');
+      resBox.classList.remove('hidden');
+      resBox.innerHTML = '<div class="text-slate-400">Executing action plan...</div>';
+
+      try {
+        const res = await fetch('/api/actions/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dry_run: dryRun,
+            custom_archive_dir: archiveDir,
+            actions: actionsList
+          })
+        });
+        const result = await res.json();
+        let logHtml = `<div class="${dryRun ? 'text-cyan-400' : 'text-emerald-400'} font-bold">Execution Finished (${dryRun ? 'DRY RUN' : 'PHYSICAL RUN'}): Kept ${result.kept}, Moved ${result.moved}, Deleted ${result.deleted}</div>`;
+        if (result.errors && result.errors.length > 0) {
+          logHtml += `<div class="text-rose-400 font-bold mt-1">Errors encountered:</div>`;
+          result.errors.forEach(err => {
+            logHtml += `<div class="text-rose-300">• ${err}</div>`;
+          });
+        }
+        if (result.action_log && result.action_log.length > 0) {
+          logHtml += `<div class="text-slate-400 mt-2 font-bold">Action Log:</div>`;
+          result.action_log.slice(0, 15).forEach(entry => {
+            logHtml += `<div class="text-slate-300">• [${entry.action}] ${entry.source} -> ${entry.destination || 'retained'}</div>`;
+          });
+        }
+        resBox.innerHTML = logHtml;
+      } catch (e) {
+        resBox.innerHTML = `<div class="text-rose-400 font-bold">Execution request failed: ${e}</div>`;
+      }
+    }
+
+    async function parseSampleTree(sampleFilePath) {
+      document.getElementById('statusMessage').innerText = `Ingesting ${sampleFilePath}...`;
+      try {
+        const res = await fetch('/api/parse-tree', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_path: sampleFilePath })
+        });
+        const data = await res.json();
+        await fetchState();
+        await loadData();
+        switchTab(data.type === 'manga' ? 'manga' : 'doujinshi');
+      } catch (e) {
+        alert('Failed parsing tree: ' + e);
+      }
+    }
+
+    document.getElementById('searchInput').addEventListener('input', renderActiveView);
+
+    // Initial load
+    fetchState();
+    loadData();
+    setInterval(fetchState, 5000);
+  </script>
+</body>
+</html>

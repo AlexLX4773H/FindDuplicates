@@ -1,5 +1,5 @@
 # CasaOS App Specification & Docker Compose Definition
-# Project: Manga & Doujinshi Duplicate Chapter Finder
+# Project: FindDuplicates - Manga & Doujinshi Duplicate Finder
 version: "3.8"
 
 services:
@@ -9,11 +9,14 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: manga-dup-finder
-    restart: "no"
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
     environment:
       - TZ=UTC
       - SCAN_PATHS=/media/manga,/media/doujinshi
       - OUTPUT_DIR=/reports
+      - ARCHIVE_DIR=/archive
       - DETECT_PARTIALS=true
       - MIN_PAGE_RATIO=0.6
       - REPORT_FORMAT=html,json,csv
@@ -23,6 +26,8 @@ services:
       - /DATA/Media/Doujinshi:/media/doujinshi:ro
       # Report output folder
       - ./reports:/reports
+      # Target archive folder for moving duplicates
+      - ./archive:/archive
       # Optional external configuration file
       - ./config.yaml:/app/config.yaml:ro
     labels:
@@ -35,10 +40,13 @@ x-casaos:
     - arm64
     - arm
   main: manga-dup-finder
+  port_map: "8765"
+  index: "/"
+  scheme: "http"
   description:
-    en_us: "Scan your manga and doujinshi libraries across multiple storage paths to detect exact chapter duplicates, different scanlation team releases, and partial or fractional chapters (e.g. Ch 12.1 vs Ch 12, missing pages, incomplete releases)."
+    en_us: "Interactive duplicate finder and chapter manager for Manga, Manhwa, and Doujinshi collections. Features intra-series and global cross-directory duplicate detection, perceptual image hashing, and a click-and-confirm UI to archive or delete duplicates."
   tagline:
-    en_us: "Manga & Doujinshi Duplicate Chapter Finder"
+    en_us: "Manga & Doujinshi Interactive Duplicate Finder"
   developer: "Alex"
   author: "Alex"
   icon: "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/icon.png"
@@ -46,6 +54,5 @@ x-casaos:
   screenshot_link:
     - "https://raw.githubusercontent.com/Alex/Find-Duplicates/main/assets/banner.png"
   title:
-    en_us: "Manga Dup Finder"
+    en_us: "FindDuplicates"
   category: "Utilities"
-  index: ""

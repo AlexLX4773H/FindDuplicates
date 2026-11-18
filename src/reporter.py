@@ -1,232 +1,284 @@
 """
-Report Generator Module
-Exports detection results into Terminal tables, JSON, CSV, and interactive HTML.
+Report Generation & Export Module
+Exports duplicate and partial reports to Terminal (ANSI/Rich), JSON, CSV, and modern HTML.
 """
 
 import json
 import csv
-import os
 from pathlib import Path
-from typing import List
-from src.detector import DuplicateGroup, PartialIssue
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+from src.models import DuplicateGroup, PartialIssue
+
+
+def export_json(
+    duplicates: List[DuplicateGroup],
+    partials: List[PartialIssue],
+    output_path: str,
+    extra_meta: Optional[Dict[str, Any]] = None
+) -> None:
+    """Exports findings to structured JSON."""
+    data = {
+        "generated_at": datetime.now().isoformat(),
+        "metadata": extra_meta or {},
+        "summary": {
+            "duplicate_groups_count": len(duplicates),
+            "partial_issues_count": len(partials),
+        },
+        "duplicates": [d.to_dict() for d in duplicates],
+        "partials": [p.to_dict() for p in partials],
+    }
+    p = Path(output_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def export_csv(duplicates: List[DuplicateGroup], output_path: str) -> None:
+    """Exports duplicate candidates to CSV for spreadsheet review."""
+    p = Path(output_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "Group ID", "Target Type", "Title", "Sub Title", "Category",
+            "Item Name", "Group/Scanlator", "Pages", "Path", "Is Recommended Keeper"
+        ])
+        for g in duplicates:
+            rec_path = g.recommended_keep_path
+            for it in g.items:
+                is_keeper = (it.get("file_path") == rec_path or it.get("raw_name") == rec_path)
+                writer.writerow([
+                    g.group_id,
+                    g.target_type,
+                    g.title,
+                    g.sub_title,
+                    g.category.value if hasattr(g.category, 'value') else str(g.category),
+                    it.get("raw_name") or it.get("work_name", ""),
+                    it.get("scanlator_group") or it.get("scanlator", ""),
+                    it.get("page_count", 0),
+                    it.get("file_path", ""),
+                    "YES" if is_keeper else "NO"
+                ])
+
+
+def export_terminal(
+    duplicates: List[DuplicateGroup],
+    partials: List[PartialIssue],
+    total_scanned: int = 0
+) -> None:
+    """Prints a clear, formatted summary to standard output."""
+    print("=" * 80)
+    print("           MANGA & DOUJINSHI DEDUPLICATION REPORT SUMMARY           ")
+    print("=" * 80)
+    print(f"[*] Total Items Scanned       : {total_scanned}")
+    print(f"[*] Duplicate Groups Detected : {len(duplicates)}")
+    print(f"[*] Partial / Incomplete Flags: {len(partials)}")
+    print("-" * 80)
+
+    if duplicates:
+        print("\n--- SAMPLE DUPLICATE GROUPS ---")
+        for i, g in enumerate(duplicates[:6], 1):
+            cat_name = g.category.value if hasattr(g.category, 'value') else str(g.category)
+            print(f"\n[{i}] {g.title} ({g.sub_title}) [{cat_name}]")
+            print(f"    Recommendation: {g.recommendation}")
+            for it in g.items:
+                name = it.get("raw_name") or it.get("work_name", "")
+                group = it.get("scanlator_group") or it.get("scanlator", "Unknown")
+                path = it.get("file_path", "")
+                is_keeper = (path == g.recommended_keep_path or name == g.recommended_keep_path)
+                badge = "[KEEP]" if is_keeper else "[DUPLICATE]"
+                print(f"    {badge:<11} {name} (Group: {group})")
+
+    if partials:
+        print("\n--- SAMPLE PARTIAL / INCOMPLETE ISSUES ---")
+        for i, p in enumerate(partials[:6], 1):
+            print(f"\n[{i}] {p.series_name} [{p.issue_type}]")
+            print(f"    {p.description}")
+
+    print("\n" + "=" * 80)
+
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manga Duplicate & Partial Chapter Report</title>
-    <style>
-        :root {
-            --bg: #0f172a;
-            --card-bg: #1e293b;
-            --text: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent: #f43f5e;
-            --accent-cyan: #38bdf8;
-            --border: #334155;
-            --badge-dup: #e11d48;
-            --badge-partial: #f59e0b;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 2rem;
-        }
-        .container { max-width: 1200px; margin: 0 auto; }
-        header { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
-        h1 { margin: 0 0 0.5rem 0; font-size: 2rem; color: #ffffff; }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2.5rem;
-        }
-        .stat-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.25rem;
-        }
-        .stat-val { font-size: 2rem; font-weight: bold; color: var(--accent-cyan); }
-        .stat-label { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; }
-        .section-title { font-size: 1.4rem; margin: 2rem 0 1rem 0; color: #e2e8f0; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--card-bg);
-            border-radius: 12px;
-            overflow: hidden;
-            margin-bottom: 2rem;
-            border: 1px solid var(--border);
-        }
-        th, td { padding: 12px 16px; text-align: left; }
-        th { background: #162032; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; }
-        tr:not(:last-child) { border-bottom: 1px solid var(--border); }
-        .badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .badge-dup { background: rgba(244, 63, 94, 0.2); color: #fb7185; border: 1px solid #f43f5e; }
-        .badge-partial { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
-        .path { font-family: monospace; font-size: 0.82rem; color: var(--text-muted); word-break: break-all; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manga & Doujinshi Deduplication Report</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); }
+  </style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Manga &amp; Doujinshi Duplicate Finder</h1>
-            <p style="color: var(--text-muted); margin: 0;">Scan Results &amp; Chapter Health Audit</p>
-        </header>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+  <div class="max-w-7xl mx-auto p-6 space-y-6">
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-800 gap-4">
+      <div>
+        <h1 class="text-3xl font-extrabold bg-gradient-to-r from-violet-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
+          FindDuplicates Report
+        </h1>
+        <p class="text-slate-400 text-sm mt-1">Generated: __TIMESTAMP__</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300">
+          Scanned: <strong class="text-violet-400">__TOTAL_SCANNED__</strong>
+        </span>
+        <span class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300">
+          Duplicate Groups: <strong class="text-pink-400">__DUPES_COUNT__</strong>
+        </span>
+        <span class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300">
+          Partials: <strong class="text-cyan-400">__PARTIALS_COUNT__</strong>
+        </span>
+      </div>
+    </header>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-val">__DUP_COUNT__</div>
-                <div class="stat-label">Duplicate Chapter Groups</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-val" style="color: #fbbf24;">__PARTIAL_COUNT__</div>
-                <div class="stat-label">Partial / Fractional Issues</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-val" style="color: #10b981;">__TOTAL_SCANNED__</div>
-                <div class="stat-label">Total Chapters Scanned</div>
-            </div>
-        </div>
-
-        <h2 class="section-title">Duplicate Chapters</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Series</th>
-                    <th>Chapter</th>
-                    <th>Category</th>
-                    <th>Count</th>
-                    <th>Instances &amp; File Paths</th>
-                </tr>
-            </thead>
-            <tbody>
-                __DUP_ROWS__
-            </tbody>
-        </table>
-
-        <h2 class="section-title">Partial &amp; Incomplete Releases</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Series</th>
-                    <th>Issue Type</th>
-                    <th>Details</th>
-                    <th>Affected Paths</th>
-                </tr>
-            </thead>
-            <tbody>
-                __PARTIAL_ROWS__
-            </tbody>
-        </table>
+    <!-- Filters & Search -->
+    <div class="flex flex-wrap items-center justify-between gap-4 glass p-4 rounded-xl">
+      <div class="flex items-center gap-2 flex-1 min-w-[280px]">
+        <input id="searchInput" type="text" placeholder="Search series, titles, scanlator groups..."
+               class="w-full bg-slate-900 border border-slate-700 px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-violet-500">
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="setFilter('all')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white">All (__DUPES_COUNT__)</button>
+        <button onclick="setFilter('manga')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">Manga</button>
+        <button onclick="setFilter('doujinshi')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">Doujinshi</button>
+        <button onclick="setFilter('partials')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">Partials (__PARTIALS_COUNT__)</button>
+      </div>
     </div>
+
+    <!-- Cards Container -->
+    <div id="resultsContainer" class="space-y-4"></div>
+  </div>
+
+  <script>
+    const duplicates = __DUPES_JSON__;
+    const partials = __PARTIALS_JSON__;
+    let currentFilter = 'all';
+
+    function renderCards() {
+      const container = document.getElementById('resultsContainer');
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      container.innerHTML = '';
+
+      if (currentFilter === 'partials') {
+        const filtered = partials.filter(p => !query || p.series_name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query));
+        if (filtered.length === 0) {
+          container.innerHTML = '<div class="p-8 text-center text-slate-500">No partial chapter issues match filter.</div>';
+          return;
+        }
+        filtered.forEach(p => {
+          const el = document.createElement('div');
+          el.className = 'glass p-5 rounded-xl border-l-4 border-l-cyan-500 space-y-3';
+          el.innerHTML = `
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-bold text-slate-100">${p.series_name}</h3>
+              <span class="px-2.5 py-1 text-xs font-semibold rounded bg-cyan-950 text-cyan-300 border border-cyan-800">${p.issue_type}</span>
+            </div>
+            <p class="text-sm text-slate-300">${p.description}</p>
+          `;
+          container.appendChild(el);
+        });
+        return;
+      }
+
+      const filtered = duplicates.filter(g => {
+        if (currentFilter === 'manga' && g.target_type !== 'manga') return false;
+        if (currentFilter === 'doujinshi' && g.target_type !== 'doujinshi') return false;
+        if (query) {
+          const titleMatch = g.title.toLowerCase().includes(query);
+          const subMatch = g.sub_title.toLowerCase().includes(query);
+          const itemMatch = g.items.some(it => (it.raw_name || it.work_name || '').toLowerCase().includes(query));
+          if (!titleMatch && !subMatch && !itemMatch) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="p-8 text-center text-slate-500">No duplicate groups match filter.</div>';
+        return;
+      }
+
+      filtered.forEach(g => {
+        const el = document.createElement('div');
+        el.className = 'glass p-5 rounded-xl space-y-4';
+        
+        let itemsHtml = g.items.map(it => {
+          const name = it.raw_name || it.work_name || '';
+          const group = it.scanlator_group || it.scanlator || 'Uncredited';
+          const path = it.file_path || name;
+          const isKeeper = (path === g.recommended_keep_path || name === g.recommended_keep_path);
+          return `
+            <div class="flex flex-col md:flex-row md:items-center justify-between p-3 rounded-lg border ${isKeeper ? 'bg-emerald-950/30 border-emerald-800/60' : 'bg-slate-900/60 border-slate-800'} text-xs gap-2">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-slate-200">${name}</span>
+                  ${isKeeper ? '<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">RECOMMENDED KEEP</span>' : ''}
+                </div>
+                <div class="text-slate-400 truncate max-w-2xl font-mono text-[11px]">${path}</div>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="px-2 py-1 rounded bg-slate-800 text-slate-300">Group: ${group}</span>
+                ${it.page_count ? `<span class="px-2 py-1 rounded bg-slate-800 text-slate-300">${it.page_count} pages</span>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        el.innerHTML = `
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div>
+              <span class="text-xs font-semibold px-2 py-0.5 rounded ${g.target_type === 'manga' ? 'bg-violet-900/50 text-violet-300 border border-violet-700' : 'bg-pink-900/50 text-pink-300 border border-pink-700'}">${g.target_type.toUpperCase()}</span>
+              <h3 class="text-lg font-bold text-slate-100 inline-block ml-2">${g.title} <span class="text-slate-400 font-normal">(${g.sub_title})</span></h3>
+            </div>
+            <span class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">${g.category}</span>
+          </div>
+          <p class="text-xs text-slate-300 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/50">${g.recommendation}</p>
+          <div class="space-y-2">${itemsHtml}</div>
+        `;
+        container.appendChild(el);
+      });
+    }
+
+    function setFilter(f) {
+      currentFilter = f;
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-violet-600', 'text-white');
+        btn.classList.add('bg-slate-800', 'text-slate-300');
+      });
+      event.target.classList.remove('bg-slate-800', 'text-slate-300');
+      event.target.classList.add('bg-violet-600', 'text-white');
+      renderCards();
+    }
+
+    document.getElementById('searchInput').addEventListener('input', renderCards);
+    renderCards();
+  </script>
 </body>
 </html>
 """
 
-def export_terminal(duplicates: List[DuplicateGroup], partials: List[PartialIssue], total_scanned: int):
-    """Outputs summary cleanly to stdout."""
-    print("=" * 80)
-    print(" MANGA & DOUJINSHI DUPLICATE & PARTIAL CHAPTER FINDER ")
-    print("=" * 80)
-    print(f"Total Chapters Analyzed: {total_scanned}")
-    print(f"Duplicate Groups Found : {len(duplicates)}")
-    print(f"Partial Issues Found   : {len(partials)}")
-    print("-" * 80)
 
-    if duplicates:
-        print("\n[DUPLICATES DETECTED]")
-        for dg in duplicates:
-            print(f"  * Series: {dg.series_name} | Chapter: {dg.chapter_num} [{dg.category}]")
-            for c in dg.chapters:
-                grp = f"[{c.scanlator_group}] " if c.scanlator_group else ""
-                print(f"      - {grp}{c.raw_name} ({c.page_count} pages) -> {c.file_path}")
+def export_html(
+    duplicates: List[DuplicateGroup],
+    partials: List[PartialIssue],
+    total_scanned: int,
+    output_path: str
+) -> None:
+    """Exports an interactive standalone HTML report."""
+    p = Path(output_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
 
-    if partials:
-        print("\n[PARTIAL / INCOMPLETE CHAPTERS DETECTED]")
-        for p in partials:
-            print(f"  * Series: {p.series_name} | Type: {p.issue_type}")
-            print(f"      Description: {p.description}")
-            for c in p.affected_chapters:
-                print(f"      - {c.raw_name} -> {c.file_path}")
-    print("=" * 80)
+    dupes_json = json.dumps([d.to_dict() for d in duplicates], ensure_ascii=False)
+    partials_json = json.dumps([pt.to_dict() for pt in partials], ensure_ascii=False)
 
-def export_json(duplicates: List[DuplicateGroup], partials: List[PartialIssue], output_path: str):
-    """Exports structured JSON data."""
-    data = {
-        "duplicates": [
-            {
-                "series": dg.series_name,
-                "chapter_num": dg.chapter_num,
-                "category": dg.category,
-                "recommendation": dg.recommendation,
-                "copies": [
-                    {
-                        "raw_name": c.raw_name,
-                        "scanlator": c.scanlator_group,
-                        "pages": c.page_count,
-                        "path": c.file_path,
-                    }
-                    for c in dg.chapters
-                ]
-            }
-            for dg in duplicates
-        ],
-        "partials": [
-            {
-                "series": p.series_name,
-                "issue_type": p.issue_type,
-                "description": p.description,
-                "affected_files": [c.file_path for c in p.affected_chapters]
-            }
-            for p in partials
-        ]
-    }
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-def export_html(duplicates: List[DuplicateGroup], partials: List[PartialIssue], total_scanned: int, output_path: str):
-    """Exports an interactive HTML dashboard report."""
-    dup_rows = []
-    for dg in duplicates:
-        paths_html = "<br>".join([f"<span class='path'>{c.raw_name} ({c.page_count} pgs): {c.file_path}</span>" for c in dg.chapters])
-        dup_rows.append(
-            f"<tr>"
-            f"<td><strong>{dg.series_name}</strong></td>"
-            f"<td>Ch. {dg.chapter_num}</td>"
-            f"<td><span class='badge badge-dup'>{dg.category}</span></td>"
-            f"<td>{len(dg.chapters)}</td>"
-            f"<td>{paths_html}</td>"
-            f"</tr>"
-        )
-
-    partial_rows = []
-    for p in partials:
-        paths_html = "<br>".join([f"<span class='path'>{c.raw_name}: {c.file_path}</span>" for c in p.affected_chapters])
-        partial_rows.append(
-            f"<tr>"
-            f"<td><strong>{p.series_name}</strong></td>"
-            f"<td><span class='badge badge-partial'>{p.issue_type}</span></td>"
-            f"<td>{p.description}</td>"
-            f"<td>{paths_html}</td>"
-            f"</tr>"
-        )
-
-    html = HTML_TEMPLATE.replace("__DUP_COUNT__", str(len(duplicates)))
-    html = html.replace("__PARTIAL_COUNT__", str(len(partials)))
+    html = HTML_TEMPLATE
+    html = html.replace("__TIMESTAMP__", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     html = html.replace("__TOTAL_SCANNED__", str(total_scanned))
-    html = html.replace("__DUP_ROWS__", "\n".join(dup_rows) if dup_rows else "<tr><td colspan='5'>No duplicates found!</td></tr>")
-    html = html.replace("__PARTIAL_ROWS__", "\n".join(partial_rows) if partial_rows else "<tr><td colspan='4'>No partial issues found!</td></tr>")
+    html = html.replace("__DUPES_COUNT__", str(len(duplicates)))
+    html = html.replace("__PARTIALS_COUNT__", str(len(partials)))
+    html = html.replace("__DUPES_JSON__", dupes_json)
+    html = html.replace("__PARTIALS_JSON__", partials_json)
 
-    with open(output_path, "w", encoding="utf-8") as f:
+    with open(p, "w", encoding="utf-8") as f:
         f.write(html)
