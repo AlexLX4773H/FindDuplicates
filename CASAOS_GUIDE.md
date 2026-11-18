@@ -42,6 +42,7 @@ version: "3.8"
 services:
   manga-dup-finder:
     image: manga-dup-finder:latest
+    pull_policy: always
     build:
       context: https://github.com/Alex/Find-Duplicates.git#main
       dockerfile: Dockerfile
