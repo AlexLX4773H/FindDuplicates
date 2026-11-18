@@ -52,14 +52,21 @@
       </div>
 
       <!-- Action Buttons -->
+      <button onclick="toggleLogConsole()" id="btnToggleLogs"
+              class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5">
+        <span id="navLogDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+        <span>Scan Logs</span>
+        <span id="navLogCount" class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded-full text-slate-400 font-mono">0</span>
+      </button>
+
       <button onclick="openScanModal()" id="btnOpenScanModal"
               class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs shadow-md shadow-cyan-600/30 transition flex items-center gap-1.5">
         <span>🚀 Run Scan</span>
       </button>
 
-      <button onclick="openReportsModal()"
+      <button onclick="switchTab('reports')"
               class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5">
-        <span>📂 Load Saved Report</span>
+        <span>📂 Saved Reports</span>
       </button>
 
       <button onclick="openCasaOSModal()"
@@ -86,8 +93,96 @@
     </div>
   </div>
 
+  <!-- Front Page Active Report & Quick Actions Strip -->
+  <div class="bg-slate-900/90 border-b border-slate-800 px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-1.5 font-medium">
+        <span class="text-violet-400 font-bold flex items-center gap-1">
+          <span>📄 Active Report:</span>
+        </span>
+        <span id="activeReportNameBadge" class="font-mono font-bold text-slate-200 bg-slate-950 px-2.5 py-0.5 rounded border border-slate-800 text-[11px]">latest_report.json</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <a id="btnViewHtmlReport" href="/api/reports/download/latest_report.html" target="_blank"
+           class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
+          <span>🌐 HTML Report ↗</span>
+        </a>
+        <a id="btnDownloadCsvReport" href="/api/reports/download/latest_report.csv" download
+           class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
+          <span>📥 CSV</span>
+        </a>
+        <a id="btnDownloadJsonReport" href="/api/reports/download/latest_report.json" download
+           class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
+          <span>📄 JSON</span>
+        </a>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="switchTab('reports')"
+              class="px-3 py-1 rounded-lg bg-violet-600/25 hover:bg-violet-600/40 border border-violet-500/40 text-violet-200 font-bold text-[11px] flex items-center gap-1.5 transition">
+        <span>📜 All Reports & History</span>
+        <span id="reportsCountBadge" class="bg-violet-500/30 px-1.5 py-0.2 rounded-full text-[10px] text-violet-300">0</span>
+      </button>
+    </div>
+  </div>
+
   <!-- Main Container -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+
+    <!-- Live Scan Activity Console Panel -->
+    <div id="liveScanConsolePanel" class="hidden glass rounded-2xl p-5 border border-cyan-500/30 shadow-2xl transition-all duration-300">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-cyan-950/90 border border-cyan-800/80 flex items-center justify-center text-cyan-400 font-mono text-sm font-bold shadow-inner">
+            &gt;_
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-extrabold text-slate-100 flex items-center gap-1.5">
+                <span>Live Scan Activity Output</span>
+              </h2>
+              <span id="consoleStatusBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 scanning-pulse flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                <span id="consoleStatusText">Scanning...</span>
+              </span>
+            </div>
+            <p id="consoleSubProgress" class="text-xs text-slate-400 font-mono truncate max-w-2xl mt-0.5">Initializing scan job...</p>
+          </div>
+        </div>
+
+        <!-- Console Control Buttons -->
+        <div class="flex items-center gap-2 text-xs">
+          <button onclick="toggleAutoScroll()" id="btnAutoScroll"
+                  class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 hover:text-white text-[11px] font-mono transition">
+            Auto-Scroll: ON
+          </button>
+          <button onclick="clearScanLogs()"
+                  class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-[11px] transition">
+            Clear Logs
+          </button>
+          <button onclick="toggleConsoleMinimize()" id="btnMinimizeConsole"
+                  class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-[11px] transition">
+            Minimize
+          </button>
+          <button onclick="closeLogConsole()" title="Close Log Console"
+                  class="w-7 h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-100 text-base font-bold transition">
+            &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- Console Body / Terminal -->
+      <div id="consoleBodyContainer" class="space-y-2 mt-3">
+        <div id="consoleLogOutput"
+             class="bg-slate-950/95 border border-slate-800 rounded-xl p-3.5 font-mono text-xs max-h-64 min-h-[140px] overflow-y-auto space-y-1 custom-scrollbar select-text text-slate-300">
+          <div class="text-slate-500 italic">No scan logs captured yet. Start a scan or parse an offline dump to view real-time execution steps.</div>
+        </div>
+        <!-- Progress Bar Indicator -->
+        <div id="consoleProgressBar" class="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-violet-500 via-pink-500 to-cyan-400 animate-pulse rounded-full w-full"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Tab Bar & Toolbar -->
     <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 glass p-4 rounded-2xl">
@@ -104,6 +199,10 @@
         </button>
         <button onclick="switchTab('samples')" id="tab-samples" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
           <span>📂 Offline Tree Dumps</span>
+        </button>
+        <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+          <span>📜 Run History & Reports</span>
+          <span id="tabReportsCountBadge" class="bg-violet-500/20 text-violet-300 text-[10px] px-1.5 py-0.2 rounded-full border border-violet-500/30">0</span>
         </button>
       </div>
 
@@ -158,6 +257,59 @@
           <button onclick="parseSampleTree('sample_data/H/h_temp_d.txt')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-bold transition">
             Parse Doujinshi (h_temp_d)
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Content: Run History & Reports View -->
+    <div id="reportsView" class="hidden glass p-6 rounded-2xl space-y-6">
+      <!-- Header -->
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+          <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
+            <span>📜 Scan Run History & Saved Reports</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            Access previous scan execution history, inspect standalone interactive HTML reports, download CSV spreadsheets, or reload any report directly into the Resolution Window.
+          </p>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <button onclick="loadReportsAndHistory()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition">
+            <span>🔄 Refresh</span>
+          </button>
+          <button onclick="openScanModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-white shadow-md shadow-cyan-600/30 flex items-center gap-1.5 transition">
+            <span>🚀 Run New Scan</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section 1: Saved Reports Directory -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+            <span class="text-violet-400">📂</span>
+            <span>Saved Duplicate Reports (<span id="reportsListCount">0</span>)</span>
+          </h3>
+          <span class="text-[11px] text-slate-400">Stored in <code class="text-violet-300 bg-slate-900 px-1.5 py-0.5 rounded">./reports</code></span>
+        </div>
+
+        <div id="frontPageReportsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div class="p-6 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-xl">Loading reports...</div>
+        </div>
+      </div>
+
+      <!-- Section 2: Recent Execution Run History -->
+      <div class="space-y-3 pt-2 border-t border-slate-800">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+            <span class="text-cyan-400">⚡</span>
+            <span>Recent Scan Run History</span>
+          </h3>
+          <span class="text-[11px] text-slate-400">Execution timeline & logs</span>
+        </div>
+
+        <div id="frontPageRunHistoryContainer" class="space-y-2">
+          <div class="p-4 text-center text-slate-500 bg-slate-900/50 rounded-xl text-xs">No scan runs recorded yet.</div>
         </div>
       </div>
     </div>
@@ -258,6 +410,24 @@
               + /media/devmon/L500/Vere NewFolder (Doujinshi)
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Live Scan Activity Output inside Modal -->
+      <div id="modalScanLogContainer" class="hidden space-y-2 pt-2 border-t border-slate-800">
+        <div class="flex items-center justify-between text-xs font-mono">
+          <span class="text-cyan-400 font-bold flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-cyan-400 scanning-pulse"></span>
+            <span>Running Scan:</span>
+            <span id="modalCurrentStep" class="text-slate-300 font-normal">Resolving directories...</span>
+          </span>
+          <button type="button" onclick="closeScanModal()" class="text-slate-400 hover:text-cyan-300 text-[11px] underline">
+            Run in Background ↗
+          </button>
+        </div>
+        <div id="modalScanTerminal"
+             class="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs max-h-44 min-h-[100px] overflow-y-auto space-y-1 custom-scrollbar text-slate-300 select-text">
+          <div class="text-slate-500 italic">Initializing run logs...</div>
         </div>
       </div>
 
@@ -448,22 +618,245 @@
     let partialsData = [];
     let selectedActions = {};
     let isScanning = false;
+    let lastLogId = 0;
+    let isLogConsoleOpen = false;
+    let autoScrollEnabled = true;
+    let isConsoleMinimized = false;
+    let pollInterval = 3500;
+    let pollTimer = null;
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function formatLogEntry(log) {
+      let badgeClass = 'text-slate-400 bg-slate-900 border-slate-700';
+      if (log.level === 'INFO') badgeClass = 'text-sky-400 bg-sky-950/60 border-sky-800/70';
+      else if (log.level === 'SCAN') badgeClass = 'text-cyan-300 bg-cyan-950/60 border-cyan-800/70';
+      else if (log.level === 'HASH') badgeClass = 'text-purple-300 bg-purple-950/60 border-purple-800/70';
+      else if (log.level === 'WARN') badgeClass = 'text-amber-300 bg-amber-950/60 border-amber-800/70';
+      else if (log.level === 'ERROR') badgeClass = 'text-rose-300 bg-rose-950/60 border-rose-800/70';
+      else if (log.level === 'SUCCESS') badgeClass = 'text-emerald-300 bg-emerald-950/60 border-emerald-800/70 font-bold';
+
+      const div = document.createElement('div');
+      div.className = 'flex items-start gap-2 py-0.5 leading-relaxed hover:bg-slate-900/60 rounded px-1 transition-colors';
+      div.innerHTML = `
+        <span class="text-slate-500 font-mono text-[11px] select-none shrink-0">${log.time}</span>
+        <span class="text-[10px] font-mono font-bold uppercase px-1.5 py-0.2 rounded border ${badgeClass} shrink-0 select-none">${log.level}</span>
+        <span class="text-slate-200 font-mono text-xs break-all flex-1">${escapeHtml(log.message)}</span>
+      `;
+      return div;
+    }
+
+    async function fetchLogs() {
+      try {
+        const res = await fetch(`/api/logs?since_id=${lastLogId}&limit=400`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Update nav counter
+        const navCount = document.getElementById('navLogCount');
+        if (navCount) navCount.innerText = data.total_logs || 0;
+
+        // Update console status & sub-step
+        const subProgress = document.getElementById('consoleSubProgress');
+        if (subProgress && data.scan_progress) {
+          subProgress.innerText = data.scan_progress;
+        }
+        const modalStep = document.getElementById('modalCurrentStep');
+        if (modalStep && data.scan_progress) {
+          modalStep.innerText = data.scan_progress;
+        }
+
+        if (data.logs && data.logs.length > 0) {
+          const consoleOut = document.getElementById('consoleLogOutput');
+          const modalOut = document.getElementById('modalScanTerminal');
+
+          if (lastLogId === 0) {
+            const ph1 = consoleOut.querySelector('.italic');
+            if (ph1) consoleOut.innerHTML = '';
+            if (modalOut) {
+              const ph2 = modalOut.querySelector('.italic');
+              if (ph2) modalOut.innerHTML = '';
+            }
+          }
+
+          data.logs.forEach(log => {
+            if (log.id > lastLogId) {
+              lastLogId = log.id;
+              consoleOut.appendChild(formatLogEntry(log));
+              if (modalOut) {
+                modalOut.appendChild(formatLogEntry(log));
+              }
+            }
+          });
+
+          if (autoScrollEnabled) {
+            consoleOut.scrollTop = consoleOut.scrollHeight;
+            if (modalOut) {
+              modalOut.scrollTop = modalOut.scrollHeight;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('fetchLogs error:', err);
+      }
+    }
+
+    function setPollRate(ms) {
+      if (pollInterval === ms && pollTimer) return;
+      pollInterval = ms;
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(fetchState, pollInterval);
+    }
+
+    function openLogConsole() {
+      const panel = document.getElementById('liveScanConsolePanel');
+      if (panel) {
+        panel.classList.remove('hidden');
+        isLogConsoleOpen = true;
+      }
+    }
+
+    function closeLogConsole() {
+      const panel = document.getElementById('liveScanConsolePanel');
+      if (panel) {
+        panel.classList.add('hidden');
+        isLogConsoleOpen = false;
+      }
+    }
+
+    function toggleLogConsole() {
+      if (isLogConsoleOpen) {
+        closeLogConsole();
+      } else {
+        openLogConsole();
+        fetchLogs();
+      }
+    }
+
+    function toggleAutoScroll() {
+      autoScrollEnabled = !autoScrollEnabled;
+      const btn = document.getElementById('btnAutoScroll');
+      if (btn) {
+        btn.innerText = `Auto-Scroll: ${autoScrollEnabled ? 'ON' : 'OFF'}`;
+        btn.className = autoScrollEnabled
+          ? 'px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 hover:text-white text-[11px] font-mono transition'
+          : 'px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-white text-[11px] font-mono transition';
+      }
+    }
+
+    function toggleConsoleMinimize() {
+      const body = document.getElementById('consoleBodyContainer');
+      const btn = document.getElementById('btnMinimizeConsole');
+      if (!body) return;
+      isConsoleMinimized = !isConsoleMinimized;
+      if (isConsoleMinimized) {
+        body.classList.add('hidden');
+        btn.innerText = 'Expand';
+      } else {
+        body.classList.remove('hidden');
+        btn.innerText = 'Minimize';
+      }
+    }
+
+    async function clearScanLogs() {
+      try {
+        await fetch('/api/logs/clear', { method: 'POST' });
+        lastLogId = 0;
+        document.getElementById('consoleLogOutput').innerHTML = '<div class="text-slate-500 italic">Logs cleared. Awaiting new scan events...</div>';
+        const modalOut = document.getElementById('modalScanTerminal');
+        if (modalOut) modalOut.innerHTML = '<div class="text-slate-500 italic">Logs cleared.</div>';
+        const navCount = document.getElementById('navLogCount');
+        if (navCount) navCount.innerText = '0';
+      } catch (e) {
+        console.error('Failed clearing logs:', e);
+      }
+    }
+
+    function updateActiveReportLinks(filename) {
+      const badge = document.getElementById('activeReportNameBadge');
+      if (badge) badge.innerText = filename;
+      const stem = filename.replace(/\.json$/i, '');
+      const htmlBtn = document.getElementById('btnViewHtmlReport');
+      if (htmlBtn) htmlBtn.href = `/api/reports/download/${stem}.html`;
+      const csvBtn = document.getElementById('btnDownloadCsvReport');
+      if (csvBtn) csvBtn.href = `/api/reports/download/${stem}.csv`;
+      const jsonBtn = document.getElementById('btnDownloadJsonReport');
+      if (jsonBtn) jsonBtn.href = `/api/reports/download/${filename}`;
+    }
 
     async function fetchState() {
       try {
         const res = await fetch('/api/state');
         const data = await res.json();
+        const wasScanning = isScanning;
         isScanning = data.is_scanning;
+
         document.getElementById('statusMessage').innerText = data.status_message || 'Ready';
         document.getElementById('statScanned').innerText = data.total_scanned;
         document.getElementById('statMangaDupes').innerText = data.manga_duplicates_count;
         document.getElementById('statDoujinDupes').innerText = data.doujinshi_duplicates_count;
 
+        if (data.loaded_report_name) {
+          updateActiveReportLinks(data.loaded_report_name);
+        }
+
+        const repBadge = document.getElementById('reportsCountBadge');
+        if (repBadge && data.run_history_count !== undefined) {
+          repBadge.innerText = data.run_history_count;
+        }
+
         const indicator = document.getElementById('scanStatusIndicator');
+        const navLogDot = document.getElementById('navLogDot');
+        const consoleBadge = document.getElementById('consoleStatusBadge');
+        const consoleStatusText = document.getElementById('consoleStatusText');
+        const progressBar = document.getElementById('consoleProgressBar');
+
         if (isScanning) {
           indicator.className = 'inline-block w-2 h-2 rounded-full bg-cyan-400 scanning-pulse';
+          if (navLogDot) navLogDot.className = 'w-2 h-2 rounded-full bg-cyan-400 scanning-pulse';
+          if (progressBar) progressBar.classList.remove('hidden');
+
+          if (consoleBadge) {
+            consoleBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 scanning-pulse flex items-center gap-1.5';
+            consoleStatusText.innerText = 'Scanning...';
+          }
+
+          // Auto-reveal live console during active scans
+          openLogConsole();
+          setPollRate(750);
         } else {
           indicator.className = 'inline-block w-2 h-2 rounded-full bg-emerald-500';
+          if (navLogDot) navLogDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+          if (progressBar) progressBar.classList.add('hidden');
+
+          if (consoleBadge) {
+            consoleBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5';
+            consoleStatusText.innerText = 'Completed';
+          }
+
+          if (wasScanning) {
+            await fetchLogs();
+            await loadData();
+            await loadReportsAndHistory();
+            setPollRate(3500);
+            const btnStart = document.getElementById('btnStartScan');
+            if (btnStart) {
+              btnStart.disabled = false;
+              btnStart.innerHTML = '<span>▶️ Generate Report</span>';
+            }
+          }
+        }
+
+        if (isLogConsoleOpen || isScanning) {
+          await fetchLogs();
         }
       } catch (e) {
         console.error(e);
@@ -485,6 +878,131 @@
       }
     }
 
+    async function loadReportsAndHistory() {
+      try {
+        const res = await fetch('/api/reports');
+        const data = await res.json();
+        const reports = data.reports || [];
+        const history = data.run_history || [];
+        const activeLoaded = data.loaded_report_name || 'latest_report.json';
+
+        // Update badges
+        const repCountBadge = document.getElementById('reportsCountBadge');
+        if (repCountBadge) repCountBadge.innerText = reports.length;
+        const tabRepCountBadge = document.getElementById('tabReportsCountBadge');
+        if (tabRepCountBadge) tabRepCountBadge.innerText = reports.length;
+        const repListCount = document.getElementById('reportsListCount');
+        if (repListCount) repListCount.innerText = reports.length;
+
+        // Render reports cards
+        const repContainer = document.getElementById('frontPageReportsContainer');
+        if (repContainer) {
+          if (reports.length === 0) {
+            repContainer.innerHTML = '<div class="p-8 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-xl text-xs">No saved reports found in ./reports yet. Run a scan to generate your first report.</div>';
+          } else {
+            repContainer.innerHTML = '';
+            reports.forEach(r => {
+              const isActive = (r.filename === activeLoaded);
+              const card = document.createElement('div');
+              card.className = `p-4 rounded-xl border transition flex flex-col justify-between space-y-3 ${
+                isActive ? 'bg-slate-900/90 border-violet-500/80 shadow-lg shadow-violet-500/10' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+              }`;
+              const dateStr = r.modified ? r.modified.replace('T', ' ').slice(0, 19) : '';
+              const sizeKb = (r.size_bytes / 1024).toFixed(1);
+
+              card.innerHTML = `
+                <div>
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] font-bold uppercase tracking-wider font-mono ${isActive ? 'text-violet-400 font-extrabold' : 'text-slate-400'}">
+                      ${isActive ? '★ Active in Resolution Window' : 'Saved Report'}
+                    </span>
+                    <span class="text-[10px] text-slate-500 font-mono">${sizeKb} KB</span>
+                  </div>
+                  <h4 class="text-xs font-bold text-slate-100 font-mono mt-1 break-all">${r.filename}</h4>
+                  <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-500/15 text-pink-300 border border-pink-500/30">
+                      ${r.duplicates_count} duplicate groups
+                    </span>
+                    ${r.partials_count > 0 ? `
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        ${r.partials_count} partials
+                      </span>
+                    ` : ''}
+                  </div>
+                  <div class="text-[10px] text-slate-500 mt-2">Generated: ${dateStr}</div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center gap-1.5 text-xs">
+                  <button onclick="loadSavedReport('${r.filename}')"
+                          class="flex-1 py-1.5 px-2 rounded-lg ${isActive ? 'bg-violet-700 hover:bg-violet-600 text-white font-bold' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'} text-[11px] font-semibold transition text-center">
+                    ${isActive ? '✓ Currently Loaded' : '⚡ Load in Window'}
+                  </button>
+                  ${r.has_html ? `
+                    <a href="/api/reports/download/${r.html_filename}" target="_blank" title="Open standalone HTML visual report"
+                       class="py-1.5 px-2 rounded-lg bg-sky-950/70 hover:bg-sky-900 border border-sky-800 text-sky-300 text-[11px] font-mono transition">
+                      HTML ↗
+                    </a>
+                  ` : ''}
+                  ${r.has_csv ? `
+                    <a href="/api/reports/download/${r.csv_filename}" download title="Download CSV spreadsheet"
+                       class="py-1.5 px-2 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 text-[11px] font-mono transition">
+                      CSV
+                    </a>
+                  ` : ''}
+                  <a href="/api/reports/download/${r.filename}" download title="Download raw JSON report"
+                     class="py-1.5 px-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 text-[11px] font-mono transition">
+                    JSON
+                  </a>
+                </div>
+              `;
+              repContainer.appendChild(card);
+            });
+          }
+        }
+
+        // Render run history
+        const histContainer = document.getElementById('frontPageRunHistoryContainer');
+        if (histContainer) {
+          if (history.length === 0) {
+            histContainer.innerHTML = '<div class="p-4 text-center text-slate-500 bg-slate-900/50 rounded-xl text-xs">No scan runs recorded in history yet.</div>';
+          } else {
+            histContainer.innerHTML = '';
+            history.forEach(run => {
+              const item = document.createElement('div');
+              item.className = 'p-3 rounded-xl bg-slate-900/70 border border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs hover:border-slate-700 transition';
+              const targetColor = String(run.target).toLowerCase().includes('manga') ? 'text-violet-400 border-violet-500/30 bg-violet-500/10' : 'text-pink-400 border-pink-500/30 bg-pink-500/10';
+              item.innerHTML = `
+                <div class="flex items-center gap-3">
+                  <span class="w-2 h-2 rounded-full ${run.status === 'completed' ? 'bg-emerald-400' : 'bg-cyan-400 scanning-pulse'}"></span>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-slate-200 capitalize">${run.target} Scan</span>
+                      <span class="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded border ${targetColor}">${run.mode}</span>
+                      <span class="text-[11px] text-slate-500 font-mono">${run.timestamp}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 mt-0.5">
+                      Scanned <strong>${run.total_scanned}</strong> items • Found <strong>${run.duplicates_count}</strong> duplicate groups ${run.partials_count > 0 ? `• <strong>${run.partials_count}</strong> partials` : ''} • Runtime: ${run.duration_seconds}s
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  ${run.report_file ? `
+                    <button onclick="loadSavedReport('${run.report_file}')"
+                            class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-semibold transition">
+                      Load Report
+                    </button>
+                  ` : ''}
+                </div>
+              `;
+              histContainer.appendChild(item);
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed loading reports and history:', err);
+      }
+    }
+
     function switchTab(tab) {
       activeTab = tab;
       document.querySelectorAll('.tab-btn').forEach(b => {
@@ -498,12 +1016,22 @@
       }
 
       const samplesView = document.getElementById('samplesView');
+      const reportsView = document.getElementById('reportsView');
+      const cardsContainer = document.getElementById('cardsContainer');
+
       if (tab === 'samples') {
         samplesView.classList.remove('hidden');
-        document.getElementById('cardsContainer').classList.add('hidden');
+        if (reportsView) reportsView.classList.add('hidden');
+        cardsContainer.classList.add('hidden');
+      } else if (tab === 'reports') {
+        if (reportsView) reportsView.classList.remove('hidden');
+        samplesView.classList.add('hidden');
+        cardsContainer.classList.add('hidden');
+        loadReportsAndHistory();
       } else {
         samplesView.classList.add('hidden');
-        document.getElementById('cardsContainer').classList.remove('hidden');
+        if (reportsView) reportsView.classList.add('hidden');
+        cardsContainer.classList.remove('hidden');
         renderActiveView();
       }
     }
@@ -695,8 +1223,22 @@
       const rawPaths = document.getElementById('scanPathsInput').value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
       const statusBox = document.getElementById('scanStatusBox');
+      const modalLogContainer = document.getElementById('modalScanLogContainer');
+      const modalTerminal = document.getElementById('modalScanTerminal');
+      const btnStart = document.getElementById('btnStartScan');
+
+      // Reveal live console on front page and inside modal
+      openLogConsole();
+      if (modalLogContainer) modalLogContainer.classList.remove('hidden');
+      if (modalTerminal) modalTerminal.innerHTML = '<div class="text-cyan-400 font-mono">🚀 Initiating scan job...</div>';
+
+      if (btnStart) {
+        btnStart.disabled = true;
+        btnStart.innerHTML = '<span>⏳ Scanning in Progress...</span>';
+      }
+
       statusBox.classList.remove('hidden');
-      statusBox.innerHTML = '<span class="scanning-pulse">🚀 Running read-only scan job & generating report...</span>';
+      statusBox.innerHTML = '<span class="scanning-pulse">🚀 Scan request sent. Reading logs in real-time...</span>';
 
       try {
         const res = await fetch('/api/scan', {
@@ -710,16 +1252,24 @@
         });
         const data = await res.json();
         if (res.ok) {
-          statusBox.innerHTML = `<span class="text-emerald-400 font-bold">✓ Scan started!</span> Report being created in background...`;
-          setTimeout(() => {
-            closeScanModal();
-            switchTab(target === 'doujinshi' ? 'doujinshi' : 'manga');
-          }, 1200);
+          isScanning = true;
+          statusBox.innerHTML = `<span class="text-emerald-400 font-bold">✓ Scan started!</span> Streaming live execution output below:`;
+          setPollRate(750);
+          await fetchLogs();
+          switchTab(target === 'doujinshi' ? 'doujinshi' : 'manga');
         } else {
           statusBox.innerHTML = `<span class="text-rose-400 font-bold">Error:</span> ${data.error || 'Failed to start scan'}`;
+          if (btnStart) {
+            btnStart.disabled = false;
+            btnStart.innerHTML = '<span>▶️ Generate Report</span>';
+          }
         }
       } catch (e) {
         statusBox.innerHTML = `<span class="text-rose-400 font-bold">Error:</span> ${e}`;
+        if (btnStart) {
+          btnStart.disabled = false;
+          btnStart.innerHTML = '<span>▶️ Generate Report</span>';
+        }
       }
     }
 
@@ -727,36 +1277,8 @@
     // SAVED REPORTS MODAL LOGIC
     // =========================================================================
     async function openReportsModal() {
-      const container = document.getElementById('reportsListContainer');
-      container.innerHTML = '<div class="text-center p-6 text-slate-500 text-xs">Loading saved reports...</div>';
-      document.getElementById('reportsModal').classList.remove('hidden');
-
-      try {
-        const res = await fetch('/api/reports');
-        const data = await res.json();
-        const reports = data.reports || [];
-        if (reports.length === 0) {
-          container.innerHTML = '<div class="text-center p-6 text-slate-500 text-xs">No saved reports found in ./reports.</div>';
-          return;
-        }
-
-        container.innerHTML = '';
-        reports.forEach(r => {
-          const item = document.createElement('div');
-          item.className = 'p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between hover:border-violet-500 cursor-pointer transition';
-          item.onclick = () => loadSavedReport(r.filename);
-          item.innerHTML = `
-            <div>
-              <div class="text-xs font-bold text-slate-200">${r.filename}</div>
-              <div class="text-[10px] text-slate-400">${r.modified.replace('T', ' ').slice(0, 19)} • ${(r.size_bytes / 1024).toFixed(1)} KB</div>
-            </div>
-            <button class="px-2.5 py-1 rounded-lg bg-violet-600 text-white font-bold text-xs">Open in Window</button>
-          `;
-          container.appendChild(item);
-        });
-      } catch (e) {
-        container.innerHTML = `<div class="text-rose-400 text-xs p-4">Error loading reports: ${e}</div>`;
-      }
+      // Direct shortcut to front page reports view
+      switchTab('reports');
     }
 
     function closeReportsModal() {
@@ -772,8 +1294,21 @@
           body: JSON.stringify({ filename })
         });
         const data = await res.json();
-        await fetchState();
-        await loadData();
+        if (res.ok) {
+          updateActiveReportLinks(filename);
+          await fetchState();
+          await loadData();
+          await loadReportsAndHistory();
+          if (data.manga_duplicates_count > 0 && data.doujinshi_duplicates_count === 0) {
+            switchTab('manga');
+          } else if (data.doujinshi_duplicates_count > 0 && data.manga_duplicates_count === 0) {
+            switchTab('doujinshi');
+          } else {
+            switchTab('manga');
+          }
+        } else {
+          alert('Failed to load report: ' + (data.error || 'Unknown error'));
+        }
       } catch (e) {
         alert('Failed to load report: ' + e);
       }
@@ -930,6 +1465,7 @@
 
     async function parseSampleTree(sampleFilePath) {
       document.getElementById('statusMessage').innerText = `Ingesting ${sampleFilePath}...`;
+      openLogConsole();
       try {
         const res = await fetch('/api/parse-tree', {
           method: 'POST',
@@ -937,8 +1473,10 @@
           body: JSON.stringify({ file_path: sampleFilePath })
         });
         const data = await res.json();
+        await fetchLogs();
         await fetchState();
         await loadData();
+        await loadReportsAndHistory();
         switchTab(data.type === 'manga' ? 'manga' : 'doujinshi');
       } catch (e) {
         alert('Failed parsing tree: ' + e);
@@ -947,10 +1485,11 @@
 
     document.getElementById('searchInput').addEventListener('input', renderActiveView);
 
-    // Initial polling
+    // Initial polling & setup
     fetchState();
     loadData();
-    setInterval(fetchState, 3500);
+    loadReportsAndHistory();
+    setPollRate(3500);
   </script>
 </body>
 </html>

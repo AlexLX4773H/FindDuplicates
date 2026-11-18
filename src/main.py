@@ -34,7 +34,7 @@ def run_manga_job(args, cfg):
     chapters = []
     for p in scan_paths:
         if p.exists():
-            chapters.extend(scan_manga_directory(p))
+            chapters.extend(scan_manga_directory(p, progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}")))
         else:
             print(f"[!] Path not found: {p}")
 
@@ -78,7 +78,7 @@ def run_doujinshi_job(args, cfg):
     works = []
     for p in scan_paths:
         if p.exists():
-            works.extend(scan_doujinshi_directory(p))
+            works.extend(scan_doujinshi_directory(p, progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}")))
         else:
             print(f"[!] Path not found: {p}")
 

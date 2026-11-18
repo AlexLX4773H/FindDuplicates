@@ -7,7 +7,7 @@ without decompressing full archives.
 import os
 import zipfile
 from pathlib import Path
-from typing import List, Dict, Any, Generator, Tuple
+from typing import List, Dict, Any, Generator, Tuple, Optional, Callable
 from src.models import ChapterItem, DoujinshiWork
 from src.parser import (
     parse_manga_chapter_name,
@@ -18,6 +18,16 @@ from src.parser import (
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif", ".bmp"}
 ARCHIVE_EXTENSIONS = {".cbz", ".zip"}
+
+
+def _report_progress(callback: Any, message: str, level: str = "INFO"):
+    """Helper to safely invoke progress callback with or without level parameter."""
+    if callback is None:
+        return
+    try:
+        callback(message, level)
+    except TypeError:
+        callback(message)
 
 
 def count_pages_in_folder(folder_path: Path) -> Tuple[int, int]:
@@ -57,7 +67,7 @@ def count_pages_in_archive(archive_path: Path) -> Tuple[int, int]:
     return count, total_size
 
 
-def scan_manga_directory(root_path: Path) -> List[ChapterItem]:
+def scan_manga_directory(root_path: Path, progress_callback: Optional[Any] = None) -> List[ChapterItem]:
     """
     Scans a manga directory structure.
     Adapts automatically to either:
@@ -66,9 +76,14 @@ def scan_manga_directory(root_path: Path) -> List[ChapterItem]:
     """
     results: List[ChapterItem] = []
     if not root_path.exists():
+        _report_progress(progress_callback, f"Directory does not exist: {root_path}", "WARN")
         return results
 
+    _report_progress(progress_callback, f"Scanning Manga directory: '{root_path.name}' ({root_path})", "INFO")
+
     try:
+        series_scanned_count = 0
+
         # Check subdirectories
         for entry in root_path.iterdir():
             if not entry.is_dir():
@@ -85,10 +100,13 @@ def scan_manga_directory(root_path: Path) -> List[ChapterItem]:
             if has_nested_series:
                 # Hierarchy: root_path / status_category / series_name / chapter
                 status_cat = entry.name
+                _report_progress(progress_callback, f"Inspecting category bucket: [{status_cat}]", "SCAN")
                 for series_dir in entry.iterdir():
                     if not series_dir.is_dir():
                         continue
                     series_name = series_dir.name
+                    series_scanned_count += 1
+                    series_added = 0
                     for item in series_dir.iterdir():
                         is_arch = item.is_file() and item.suffix.lower() in ARCHIVE_EXTENSIONS
                         is_fold = item.is_dir()
@@ -102,9 +120,19 @@ def scan_manga_directory(root_path: Path) -> List[ChapterItem]:
                         ch.page_count = pages
                         ch.file_size_bytes = size
                         results.append(ch)
+                        series_added += 1
+
+                    if series_scanned_count % 15 == 0 or series_scanned_count == 1:
+                        _report_progress(
+                            progress_callback,
+                            f"Series [{series_scanned_count}]: '{series_name}' ({series_added} ch) | Total indexed: {len(results)}",
+                            "SCAN"
+                        )
             else:
                 # Standard hierarchy: root_path / series_name / chapter
                 series_name = entry.name
+                series_scanned_count += 1
+                series_added = 0
                 for item in entry.iterdir():
                     is_arch = item.is_file() and item.suffix.lower() in ARCHIVE_EXTENSIONS
                     is_fold = item.is_dir()
@@ -117,14 +145,28 @@ def scan_manga_directory(root_path: Path) -> List[ChapterItem]:
                     ch.page_count = pages
                     ch.file_size_bytes = size
                     results.append(ch)
+                    series_added += 1
+
+                if series_scanned_count % 15 == 0 or series_scanned_count == 1:
+                    _report_progress(
+                        progress_callback,
+                        f"Series [{series_scanned_count}]: '{series_name}' ({series_added} ch) | Total indexed: {len(results)}",
+                        "SCAN"
+                    )
+
+        _report_progress(
+            progress_callback,
+            f"Finished scanning '{root_path.name}': {len(results)} chapters collected across {series_scanned_count} series.",
+            "SUCCESS"
+        )
 
     except (PermissionError, OSError) as e:
-        print(f"[Warning] Access issue scanning {root_path}: {e}")
+        _report_progress(progress_callback, f"Access issue scanning {root_path}: {e}", "WARN")
 
     return results
 
 
-def scan_doujinshi_directory(root_path: Path) -> List[DoujinshiWork]:
+def scan_doujinshi_directory(root_path: Path, progress_callback: Optional[Any] = None) -> List[DoujinshiWork]:
     """
     Recursively scans a doujinshi / H root directory.
     Identifies standalone works, archives, and multi-chapter series.
@@ -132,11 +174,18 @@ def scan_doujinshi_directory(root_path: Path) -> List[DoujinshiWork]:
     """
     works: List[DoujinshiWork] = []
     if not root_path.exists():
+        _report_progress(progress_callback, f"Directory does not exist: {root_path}", "WARN")
         return works
 
+    _report_progress(progress_callback, f"Scanning Doujinshi directory: '{root_path.name}' ({root_path})", "INFO")
+
     try:
+        dir_count = 0
+        archive_count = 0
+
         for current_root, dirs, files in os.walk(root_path):
             current_path = Path(current_root)
+            dir_count += 1
 
             # Check archive files in this folder
             for f in files:
@@ -149,17 +198,21 @@ def scan_doujinshi_directory(root_path: Path) -> List[DoujinshiWork]:
                     dw.file_size_bytes = size
                     dw.source_root = root_path.name
                     works.append(dw)
+                    archive_count += 1
+                    if archive_count % 30 == 0:
+                        _report_progress(
+                            progress_callback,
+                            f"Discovered archive #{archive_count}: '{f_path.name}' | Total works: {len(works)}",
+                            "SCAN"
+                        )
 
             # Check folders representing works
-            # If a folder has images or only has child folder like '_chapter', treat it as a work
             if current_path != root_path:
                 name = current_path.name
                 if not is_leaf_chapter_folder(name) and len(name) > 3 and not name.isdigit():
-                    # Check if images exist here or inside child chapter folder
                     pages, size = count_pages_in_folder(current_path)
                     child_chapter = None
                     if pages == 0:
-                        # Check subdirectories for chapter folders
                         for d in dirs:
                             if is_leaf_chapter_folder(d):
                                 sub_p, sub_s = count_pages_in_folder(current_path / d)
@@ -176,8 +229,20 @@ def scan_doujinshi_directory(root_path: Path) -> List[DoujinshiWork]:
                         dw.source_root = root_path.name
                         dw.inner_chapter_folder = child_chapter
                         works.append(dw)
+                        if len(works) % 30 == 0:
+                            _report_progress(
+                                progress_callback,
+                                f"Indexed work folder: '{name}' | Total works: {len(works)}",
+                                "SCAN"
+                            )
+
+        _report_progress(
+            progress_callback,
+            f"Finished scanning '{root_path.name}': {len(works)} works ({archive_count} archives, {dir_count} directories inspected).",
+            "SUCCESS"
+        )
 
     except (PermissionError, OSError) as e:
-        print(f"[Warning] Access issue scanning {root_path}: {e}")
+        _report_progress(progress_callback, f"Access issue scanning {root_path}: {e}", "WARN")
 
     return works
