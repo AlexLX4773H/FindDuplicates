@@ -1,0 +1,107 @@
+# CasaOS-Native App Specification & Docker Compose Definition
+# Project: FindDuplicates - Manga & Doujinshi Duplicate Chapter Finder
+name: findduplicates
+version: "3.8"
+
+services:
+  manga-dup-finder:
+    image: ghcr.io/alexlx4773h/findduplicates:latest
+    pull_policy: always
+    container_name: manga-dup-finder
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - target: 8765
+        published: 8765
+        protocol: tcp
+    environment:
+      - TZ=UTC
+      - SCAN_PATHS=/sg2b/Share2sgb/Manga,/media/devmon/L500/Vere NewFolder
+      - MANGA_SCAN_PATH=/sg2b/Share2sgb/Manga
+      - DOUJINSHI_SCAN_PATH=/media/devmon/L500/Vere NewFolder
+      - OUTPUT_DIR=/reports
+      - ARCHIVE_DIR=/archive
+      - DETECT_PARTIALS=true
+      - MIN_PAGE_RATIO=0.6
+      - REPORT_FORMAT=html,json,csv
+    volumes:
+      # Manga direct 1:1 host storage mount
+      - type: bind
+        source: "/sg2b/Share2sgb/Manga"
+        target: "/sg2b/Share2sgb/Manga"
+      # Doujinshi direct 1:1 host storage mount
+      - type: bind
+        source: "/media/devmon/L500/Vere NewFolder"
+        target: "/media/devmon/L500/Vere NewFolder"
+      # Reports output and archive target folder in CasaOS AppData
+      - type: bind
+        source: "/DATA/AppData/FindDuplicates/reports"
+        target: "/reports"
+      - type: bind
+        source: "/DATA/AppData/FindDuplicates/archive"
+        target: "/archive"
+    labels:
+      icon: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/icon.png"
+
+    # CasaOS Service Metadata (UI Form Layout)
+    x-casaos:
+      volumes:
+        - container: "/sg2b/Share2sgb/Manga"
+          description:
+            en_us: "Manga storage directory"
+        - container: "/media/devmon/L500/Vere NewFolder"
+          description:
+            en_us: "Doujinshi storage directory"
+        - container: "/reports"
+          description:
+            en_us: "Deduplication reports output folder"
+        - container: "/archive"
+          description:
+            en_us: "Archive folder for moved duplicates"
+      ports:
+        - container: "8765"
+          description:
+            en_us: "Web UI port"
+      envs:
+        - container: TZ
+          description:
+            en_us: "Container timezone"
+        - container: SCAN_PATHS
+          description:
+            en_us: "Default scan directories (comma-separated)"
+        - container: MANGA_SCAN_PATH
+          description:
+            en_us: "Manga scan path"
+        - container: DOUJINSHI_SCAN_PATH
+          description:
+            en_us: "Doujinshi scan path"
+        - container: OUTPUT_DIR
+          description:
+            en_us: "Reports output directory"
+        - container: ARCHIVE_DIR
+          description:
+            en_us: "Duplicates archive directory"
+
+# CasaOS App Store Metadata & Dashboard UI Settings
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+    - arm
+  main: manga-dup-finder
+  port_map: "8765"
+  index: "/"
+  scheme: "http"
+  title:
+    en_us: "FindDuplicates"
+  tagline:
+    en_us: "Manga & Doujinshi Interactive Duplicate Finder"
+  description:
+    en_us: "Scan, detect, and resolve duplicate chapters across Manga and Doujinshi libraries. Features intra-series and global cross-directory duplicate detection, perceptual image hashing, and an interactive UI to click-and-confirm what stays, what moves to archive, or what gets deleted."
+  developer: "AlexLX4773H"
+  author: "AlexLX4773H"
+  icon: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/icon.png"
+  thumbnail: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/banner.png"
+  screenshot_link:
+    - "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/banner.png"
+  category: "Utilities"

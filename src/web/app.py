@@ -98,12 +98,13 @@ def get_config_paths():
 
 @app.get("/api/casaos-compose")
 def get_casaos_compose():
-    """Returns the pre-configured docker-compose.yml content for 1-click CasaOS import."""
-    compose_path = Path("docker-compose.yml")
-    if compose_path.exists():
-        with open(compose_path, "r", encoding="utf-8") as f:
-            return {"content": f.read()}
-    return {"content": "# docker-compose.yml not found"}
+    """Returns the pre-configured docker-compose.casaos.yml content for 1-click CasaOS import."""
+    for name in ["docker-compose.casaos.yml", "docker-compose.yml"]:
+        p = Path(name)
+        if p.exists():
+            with open(p, "r", encoding="utf-8") as f:
+                return {"content": f.read()}
+    return {"content": "# docker compose file not found"}
 
 
 @app.get("/api/reports")

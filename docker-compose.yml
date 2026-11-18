@@ -1,5 +1,6 @@
 # CasaOS App Specification & Docker Compose Definition
 # Project: FindDuplicates - Manga & Doujinshi Duplicate Chapter Finder
+name: findduplicates
 version: "3.8"
 
 services:
@@ -25,13 +26,40 @@ services:
       - REPORT_FORMAT=html,json,csv
     volumes:
       # Direct 1:1 host storage mounts
-      - "/sg2b/Share2sgb/Manga:/sg2b/Share2sgb/Manga"
-      - "/media/devmon/L500/Vere NewFolder:/media/devmon/L500/Vere NewFolder"
+      - type: bind
+        source: "/sg2b/Share2sgb/Manga"
+        target: "/sg2b/Share2sgb/Manga"
+      - type: bind
+        source: "/media/devmon/L500/Vere NewFolder"
+        target: "/media/devmon/L500/Vere NewFolder"
       # Reports output and archive target folder
-      - "/DATA/AppData/FindDuplicates/reports:/reports"
-      - "/DATA/AppData/FindDuplicates/archive:/archive"
+      - type: bind
+        source: "/DATA/AppData/FindDuplicates/reports"
+        target: "/reports"
+      - type: bind
+        source: "/DATA/AppData/FindDuplicates/archive"
+        target: "/archive"
     labels:
       icon: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/icon.png"
+
+    x-casaos:
+      volumes:
+        - container: "/sg2b/Share2sgb/Manga"
+          description:
+            en_us: "Manga storage directory"
+        - container: "/media/devmon/L500/Vere NewFolder"
+          description:
+            en_us: "Doujinshi storage directory"
+        - container: "/reports"
+          description:
+            en_us: "Deduplication reports output"
+        - container: "/archive"
+          description:
+            en_us: "Archive folder for moved duplicates"
+      ports:
+        - container: "8765"
+          description:
+            en_us: "Web UI port"
 
 # CasaOS App Store Metadata & Dashboard UI Settings
 x-casaos:
@@ -55,4 +83,4 @@ x-casaos:
     - "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/banner.png"
   title:
     en_us: "FindDuplicates"
-  category: "Media"
+  category: "Utilities"

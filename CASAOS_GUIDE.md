@@ -36,9 +36,10 @@ We have added a GitHub Actions workflow in [`.github/workflows/docker-publish.ym
    ```
    *(Ensure your package visibility on GitHub is set to Public under GitHub Profile $\rightarrow$ Packages $\rightarrow$ FindDuplicates $\rightarrow$ Package Settings $\rightarrow$ Change visibility $\rightarrow$ Public).*
 
-3. In CasaOS, import this compose YAML (which uses the public GHCR image and `pull_policy: always`):
+3. In CasaOS, import [`docker-compose.casaos.yml`](docker-compose.casaos.yml) (specifically formatted for CasaOS App Store schema with `type: bind` and `category: Utilities` to prevent CasaOS from auto-routing to `/DATA/Media`):
 
 ```yaml
+name: findduplicates
 version: "3.8"
 
 services:
@@ -47,8 +48,11 @@ services:
     pull_policy: always
     container_name: manga-dup-finder
     restart: unless-stopped
+    network_mode: bridge
     ports:
-      - "8765:8765"
+      - target: 8765
+        published: 8765
+        protocol: tcp
     environment:
       - TZ=UTC
       - SCAN_PATHS=/sg2b/Share2sgb/Manga,/media/devmon/L500/Vere NewFolder
@@ -60,14 +64,42 @@ services:
       - MIN_PAGE_RATIO=0.6
       - REPORT_FORMAT=html,json,csv
     volumes:
-      # Direct 1:1 host storage mounts
-      - "/sg2b/Share2sgb/Manga:/sg2b/Share2sgb/Manga"
-      - "/media/devmon/L500/Vere NewFolder:/media/devmon/L500/Vere NewFolder"
-      # Reports output and archive target folder
-      - "/DATA/AppData/FindDuplicates/reports:/reports"
-      - "/DATA/AppData/FindDuplicates/archive:/archive"
+      # Manga direct 1:1 host storage mount
+      - type: bind
+        source: "/sg2b/Share2sgb/Manga"
+        target: "/sg2b/Share2sgb/Manga"
+      # Doujinshi direct 1:1 host storage mount
+      - type: bind
+        source: "/media/devmon/L500/Vere NewFolder"
+        target: "/media/devmon/L500/Vere NewFolder"
+      # Reports output and archive target folder in CasaOS AppData
+      - type: bind
+        source: "/DATA/AppData/FindDuplicates/reports"
+        target: "/reports"
+      - type: bind
+        source: "/DATA/AppData/FindDuplicates/archive"
+        target: "/archive"
     labels:
       icon: "https://raw.githubusercontent.com/AlexLX4773H/FindDuplicates/main/assets/icon.png"
+
+    x-casaos:
+      volumes:
+        - container: "/sg2b/Share2sgb/Manga"
+          description:
+            en_us: "Manga storage directory"
+        - container: "/media/devmon/L500/Vere NewFolder"
+          description:
+            en_us: "Doujinshi storage directory"
+        - container: "/reports"
+          description:
+            en_us: "Deduplication reports output folder"
+        - container: "/archive"
+          description:
+            en_us: "Archive folder for moved duplicates"
+      ports:
+        - container: "8765"
+          description:
+            en_us: "Web UI port"
 
 x-casaos:
   architectures:
@@ -82,7 +114,7 @@ x-casaos:
     en_us: "FindDuplicates"
   tagline:
     en_us: "Manga & Doujinshi Interactive Duplicate Finder"
-  category: "Media"
+  category: "Utilities"
 ```
 
 ---
