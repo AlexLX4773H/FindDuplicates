@@ -5,6 +5,7 @@ Applies tailored duplicate detection algorithms:
 - Doujinshi: Global cross-directory matching (artist + title normalization, tag preferences).
 """
 
+import os
 import uuid
 from collections import defaultdict
 from typing import List, Dict, Tuple, Any, Optional

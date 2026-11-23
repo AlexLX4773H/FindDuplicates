@@ -63,7 +63,12 @@ def test_partials_half_chapters():
     split_10_flagged = any("10.1" in i.description for i in fractional_issues)
     assert split_10_flagged, "Real split chapter 10.1 was not detected"
 
+    # Test when checking with check_mode="image" (ensure os.path and image verification logic execute cleanly without NameError)
+    issues_by_image = detect_manga_partials(chapters, check_mode="image")
+    assert isinstance(issues_by_image, list)
+
     print(f"  ✓ Under check_mode='name': {len(fractional_issues)} issue detected (only real split 10.1; .5 specials 1.5, 2.5, 12.5 correctly ignored)")
+    print(f"  ✓ Under check_mode='image': executed successfully without NameError")
 
 def test_manga_exclusion_list():
     print("[TEST 3] Verifying Manga Exclusion List in Scan Jobs...")
