@@ -61,7 +61,12 @@
 
       <button onclick="openScanModal()" id="btnOpenScanModal"
               class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs shadow-md shadow-cyan-600/30 transition flex items-center gap-1.5">
-        <span>🚀 Run Scan</span>
+        <span>🚀 Quick Scan</span>
+      </button>
+
+      <button onclick="switchTab('jobs')"
+              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-cyan-300 transition flex items-center gap-1.5">
+        <span>🎯 Scan Jobs</span>
       </button>
 
       <button onclick="switchTab('reports')"
@@ -115,12 +120,16 @@
            class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
           <span>📄 JSON</span>
         </a>
+        <button id="btnDiscardActiveReport" onclick="discardActiveReport()" title="Discard currently generated/loaded report from the Resolution Window"
+                class="px-2.5 py-1 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-800/80 text-rose-300 hover:text-rose-200 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
+          <span>🗑️ Discard Report</span>
+        </button>
       </div>
     </div>
     <div class="flex items-center gap-2">
       <button onclick="switchTab('reports')"
               class="px-3 py-1 rounded-lg bg-violet-600/25 hover:bg-violet-600/40 border border-violet-500/40 text-violet-200 font-bold text-[11px] flex items-center gap-1.5 transition">
-        <span>📜 All Reports & History</span>
+        <span>📜 Saved Reports & History</span>
         <span id="reportsCountBadge" class="bg-violet-500/30 px-1.5 py-0.2 rounded-full text-[10px] text-violet-300">0</span>
       </button>
     </div>
@@ -200,8 +209,12 @@
         <button onclick="switchTab('samples')" id="tab-samples" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
           <span>📂 Offline Tree Dumps</span>
         </button>
+        <button onclick="switchTab('jobs')" id="tab-jobs" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+          <span>🎯 Scan Jobs</span>
+          <span id="tabJobsCountBadge" class="bg-cyan-500/20 text-cyan-300 text-[10px] px-1.5 py-0.2 rounded-full border border-cyan-500/30">0</span>
+        </button>
         <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
-          <span>📜 Run History & Reports</span>
+          <span>📂 Saved Reports</span>
           <span id="tabReportsCountBadge" class="bg-violet-500/20 text-violet-300 text-[10px] px-1.5 py-0.2 rounded-full border border-violet-500/30">0</span>
         </button>
       </div>
@@ -261,16 +274,138 @@
       </div>
     </div>
 
-    <!-- Tab Content: Run History & Reports View -->
+    <!-- Tab Content: Scan Jobs Management View (NEW) -->
+    <div id="jobsView" class="hidden glass p-6 rounded-2xl space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+          <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
+            <span>🎯 Scan Jobs Manager</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            Create and manage user-executable scan jobs with custom libraries (Manga / Manhwa, Doujinshi), multiple target directory paths, and detection modalities. Saved jobs persist across restarts.
+          </p>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <button onclick="toggleCreateJobForm()" id="btnToggleCreateJob"
+                  class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-white shadow-md shadow-cyan-600/30 flex items-center gap-1.5 transition">
+            <span>+ Create New Scan Job</span>
+          </button>
+          <button onclick="loadScanJobs()"
+                  class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition">
+            <span>🔄 Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Create / Edit Job Panel (Collapsible) -->
+      <div id="createJobFormPanel" class="p-5 rounded-2xl bg-slate-900/90 border border-cyan-500/40 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <h3 id="jobFormTitle" class="text-sm font-extrabold text-slate-100 flex items-center gap-2">
+            <span>⚡ Create New Scan Job</span>
+          </h3>
+          <button onclick="cancelJobEdit()" class="text-slate-400 hover:text-slate-200 text-xs font-semibold">&times; Close</button>
+        </div>
+
+        <input type="hidden" id="editJobId" value="">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Job Name -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-300">Job Name (User-Defined):</label>
+            <input type="text" id="jobNameInput" placeholder="e.g. Weekly NAS Manga Scan, Doujinshi HDD Backup"
+                   class="w-full bg-slate-950 border border-slate-700 px-3.5 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+          </div>
+
+          <!-- Target Library -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-300">Target Library Type:</label>
+            <select id="jobTargetTypeSelect" class="w-full bg-slate-950 border border-slate-700 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+              <option value="manga">📚 Manga / Manhwa (Intra-Series Scoped)</option>
+              <option value="doujinshi">🌸 Doujinshi (Global Cross-Directory Scoped)</option>
+              <option value="all">⚡ Both Libraries (Comprehensive Full Scan)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Target Locations (Multiple paths supported) -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-slate-300">
+              Target Locations / Directories <span class="text-cyan-400 font-normal">(Can be multiple &mdash; enter one path per line)</span>:
+            </label>
+            <div class="flex items-center gap-2 text-[10px]">
+              <button type="button" onclick="appendJobPresetPath('/sg2b/Share2sgb/Manga')" class="text-violet-400 hover:underline">+ Manga NAS</button>
+              <button type="button" onclick="appendJobPresetPath('/media/devmon/L500/Vere NewFolder')" class="text-pink-400 hover:underline">+ Doujinshi Disk</button>
+            </div>
+          </div>
+          <textarea id="jobPathsInput" rows="3"
+                    placeholder="/sg2b/Share2sgb/Manga&#10;/media/devmon/L500/Vere NewFolder&#10;G:\My Manga Archive"
+                    class="w-full bg-slate-950 border border-slate-700 p-3 rounded-xl text-xs font-mono text-slate-100 focus:outline-none focus:border-cyan-500 custom-scrollbar"></textarea>
+          <p class="text-[11px] text-slate-500">Enter full absolute filesystem paths or mounted volume paths. Multiple paths will be scanned sequentially in a unified job.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Modality -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-300">Detection Modality:</label>
+            <select id="jobModeSelect" class="w-full bg-slate-950 border border-slate-700 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+              <option value="name">⚡ Name & Metadata (Fast, zero disk I/O overhead)</option>
+              <option value="image">👁️ Visual Perceptual Hashing (dHash / pHash artwork verification)</option>
+            </select>
+          </div>
+
+          <!-- Description / Notes -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-300">Job Description / Notes (Optional):</label>
+            <input type="text" id="jobDescInput" placeholder="Optional notes for this job..."
+                   class="w-full bg-slate-950 border border-slate-700 px-3.5 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button type="button" onclick="cancelJobEdit()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition">
+            Cancel
+          </button>
+          <button type="button" onclick="saveScanJob(false)" id="btnSaveJobOnly"
+                  class="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white transition flex items-center gap-1.5">
+            <span>💾 Save Job</span>
+          </button>
+          <button type="button" onclick="saveScanJob(true)" id="btnSaveAndRunJob"
+                  class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-xs font-bold text-white shadow-md shadow-emerald-600/30 transition flex items-center gap-1.5">
+            <span>🚀 Save & Run Now</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Saved Scan Jobs List -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+            <span class="text-cyan-400">📋</span>
+            <span>Saved Scan Jobs (<span id="jobsCountText">0</span>)</span>
+          </h3>
+          <span class="text-[11px] text-slate-400">Click &ldquo;Run Job Now&rdquo; to execute any job on demand</span>
+        </div>
+
+        <div id="jobsListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-8 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-xl text-xs">
+            Loading saved scan jobs...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Content: Saved Reports View -->
     <div id="reportsView" class="hidden glass p-6 rounded-2xl space-y-6">
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
-            <span>📜 Scan Run History & Saved Reports</span>
+            <span>📂 Saved Duplicate Reports</span>
           </h2>
           <p class="text-xs text-slate-400 mt-0.5">
-            Access previous scan execution history, inspect standalone interactive HTML reports, download CSV spreadsheets, or reload any report directly into the Resolution Window.
+            Browse all saved deduplication reports, see which scan job created each report and when, inspect interactive HTML reports, download CSV spreadsheets, remove unwanted reports, or load any report directly into the Resolution Window.
           </p>
         </div>
         <div class="flex items-center gap-2 text-xs">
@@ -782,14 +917,37 @@
 
     function updateActiveReportLinks(filename) {
       const badge = document.getElementById('activeReportNameBadge');
+      const htmlBtn = document.getElementById('btnViewHtmlReport');
+      const csvBtn = document.getElementById('btnDownloadCsvReport');
+      const jsonBtn = document.getElementById('btnDownloadJsonReport');
+      const discardBtn = document.getElementById('btnDiscardActiveReport');
+
+      if (!filename || filename === 'None') {
+        if (badge) badge.innerText = 'None';
+        if (htmlBtn) { htmlBtn.href = '#'; htmlBtn.classList.add('opacity-40', 'pointer-events-none'); }
+        if (csvBtn) { csvBtn.href = '#'; csvBtn.classList.add('opacity-40', 'pointer-events-none'); }
+        if (jsonBtn) { jsonBtn.href = '#'; jsonBtn.classList.add('opacity-40', 'pointer-events-none'); }
+        if (discardBtn) { discardBtn.classList.add('opacity-40', 'pointer-events-none'); }
+        return;
+      }
+
       if (badge) badge.innerText = filename;
       const stem = filename.replace(/\.json$/i, '');
-      const htmlBtn = document.getElementById('btnViewHtmlReport');
-      if (htmlBtn) htmlBtn.href = `/api/reports/download/${stem}.html`;
-      const csvBtn = document.getElementById('btnDownloadCsvReport');
-      if (csvBtn) csvBtn.href = `/api/reports/download/${stem}.csv`;
-      const jsonBtn = document.getElementById('btnDownloadJsonReport');
-      if (jsonBtn) jsonBtn.href = `/api/reports/download/${filename}`;
+      if (htmlBtn) {
+        htmlBtn.href = `/api/reports/download/${stem}.html`;
+        htmlBtn.classList.remove('opacity-40', 'pointer-events-none');
+      }
+      if (csvBtn) {
+        csvBtn.href = `/api/reports/download/${stem}.csv`;
+        csvBtn.classList.remove('opacity-40', 'pointer-events-none');
+      }
+      if (jsonBtn) {
+        jsonBtn.href = `/api/reports/download/${filename}`;
+        jsonBtn.classList.remove('opacity-40', 'pointer-events-none');
+      }
+      if (discardBtn) {
+        discardBtn.classList.remove('opacity-40', 'pointer-events-none');
+      }
     }
 
     async function fetchState() {
@@ -846,6 +1004,7 @@
             await fetchLogs();
             await loadData();
             await loadReportsAndHistory();
+            await loadScanJobs();
             setPollRate(3500);
             const btnStart = document.getElementById('btnStartScan');
             if (btnStart) {
@@ -878,6 +1037,78 @@
       }
     }
 
+    // =========================================================================
+    // SAVED REPORTS & DISCARD LOGIC
+    // =========================================================================
+
+    async function discardActiveReport() {
+      const activeBadge = document.getElementById('activeReportNameBadge');
+      const currentReportName = activeBadge ? activeBadge.innerText : '';
+      if (!currentReportName || currentReportName === 'None') {
+        alert('No active report is currently loaded in the Resolution Window.');
+        return;
+      }
+      if (!confirm(`Are you sure you want to discard the active report "${currentReportName}" from the Resolution Window?\n\nThis will clear the current review session.`)) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/reports/discard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delete_file: false })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          mangaData = [];
+          doujinshiData = [];
+          partialsData = [];
+          duplicatesData = [];
+          updateStats();
+          updateActiveReportLinks(null);
+          const container = document.getElementById('cardsContainer');
+          if (container) {
+            container.innerHTML = `
+              <div class="p-12 text-center text-slate-500 glass rounded-2xl space-y-3">
+                <div class="text-3xl">🗑️</div>
+                <div class="text-slate-300 font-bold">Report Discarded</div>
+                <div class="text-xs text-slate-500">The Resolution Window has been reset. You can run a new scan or select a saved report from the "Saved Reports" tab.</div>
+              </div>
+            `;
+          }
+          await loadReportsAndHistory();
+        } else {
+          alert('Failed to discard report: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Error discarding report: ' + err.message);
+      }
+    }
+
+    async function deleteSavedReport(filename) {
+      if (!confirm(`Are you sure you want to permanently remove saved report "${filename}" and its associated HTML/CSV export files?`)) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/reports/${encodeURIComponent(filename)}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const activeBadge = document.getElementById('activeReportNameBadge');
+          if (activeBadge && (activeBadge.innerText === filename || activeBadge.innerText.startsWith(filename.replace(/\.json$/i, '')))) {
+            await fetchState();
+            await loadData();
+          }
+          await loadReportsAndHistory();
+          await loadScanJobs();
+        } else {
+          alert('Failed to remove report: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Error removing report: ' + err.message);
+      }
+    }
+
     async function loadReportsAndHistory() {
       try {
         const res = await fetch('/api/reports');
@@ -907,7 +1138,7 @@
               card.className = `p-4 rounded-xl border transition flex flex-col justify-between space-y-3 ${
                 isActive ? 'bg-slate-900/90 border-violet-500/80 shadow-lg shadow-violet-500/10' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
               }`;
-              const dateStr = r.modified ? r.modified.replace('T', ' ').slice(0, 19) : '';
+              const dateStr = r.created_at || (r.modified ? r.modified.replace('T', ' ').slice(0, 19) : '');
               const sizeKb = (r.size_bytes / 1024).toFixed(1);
 
               card.innerHTML = `
@@ -919,7 +1150,20 @@
                     <span class="text-[10px] text-slate-500 font-mono">${sizeKb} KB</span>
                   </div>
                   <h4 class="text-xs font-bold text-slate-100 font-mono mt-1 break-all">${r.filename}</h4>
-                  <div class="flex flex-wrap items-center gap-1.5 mt-2">
+
+                  <!-- Job Origin -->
+                  <div class="mt-2 text-xs font-semibold text-cyan-300 flex items-center gap-1.5">
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-800/80 text-cyan-400 font-mono uppercase">Job</span>
+                    <span class="truncate" title="${r.job_name || 'Manual Scan'}">${r.job_name || 'Manual Deduplication Scan'}</span>
+                  </div>
+
+                  <!-- Creation Date & Time -->
+                  <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-1 font-mono">
+                    <span class="text-slate-500">📅 Created:</span>
+                    <span>${dateStr}</span>
+                  </div>
+
+                  <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
                     <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-500/15 text-pink-300 border border-pink-500/30">
                       ${r.duplicates_count} duplicate groups
                     </span>
@@ -928,8 +1172,10 @@
                         ${r.partials_count} partials
                       </span>
                     ` : ''}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                      ${r.total_scanned} scanned
+                    </span>
                   </div>
-                  <div class="text-[10px] text-slate-500 mt-2">Generated: ${dateStr}</div>
                 </div>
 
                 <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center gap-1.5 text-xs">
@@ -953,6 +1199,10 @@
                      class="py-1.5 px-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 text-[11px] font-mono transition">
                     JSON
                   </a>
+                  <button onclick="deleteSavedReport('${r.filename}')" title="Permanently remove this saved report and its associated files"
+                          class="py-1.5 px-2.5 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-800 text-rose-300 hover:text-rose-100 text-[11px] font-mono transition flex items-center gap-1">
+                    <span>🗑️</span>
+                  </button>
                 </div>
               `;
               repContainer.appendChild(card);
@@ -971,12 +1221,13 @@
               const item = document.createElement('div');
               item.className = 'p-3 rounded-xl bg-slate-900/70 border border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs hover:border-slate-700 transition';
               const targetColor = String(run.target).toLowerCase().includes('manga') ? 'text-violet-400 border-violet-500/30 bg-violet-500/10' : 'text-pink-400 border-pink-500/30 bg-pink-500/10';
+              const jobDisplayName = run.job_name || (run.target + ' Scan');
               item.innerHTML = `
                 <div class="flex items-center gap-3">
                   <span class="w-2 h-2 rounded-full ${run.status === 'completed' ? 'bg-emerald-400' : 'bg-cyan-400 scanning-pulse'}"></span>
                   <div>
                     <div class="flex items-center gap-2">
-                      <span class="font-bold text-slate-200 capitalize">${run.target} Scan</span>
+                      <span class="font-bold text-slate-200 capitalize">${jobDisplayName}</span>
                       <span class="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded border ${targetColor}">${run.mode}</span>
                       <span class="text-[11px] text-slate-500 font-mono">${run.timestamp}</span>
                     </div>
@@ -1003,6 +1254,284 @@
       }
     }
 
+    // =========================================================================
+    // SCAN JOBS MANAGEMENT LOGIC
+    // =========================================================================
+
+    let savedJobsData = [];
+
+    async function loadScanJobs() {
+      try {
+        const res = await fetch('/api/jobs');
+        const data = await res.json();
+        savedJobsData = data.jobs || [];
+
+        const badge = document.getElementById('tabJobsCountBadge');
+        if (badge) badge.innerText = savedJobsData.length;
+        const countText = document.getElementById('jobsCountText');
+        if (countText) countText.innerText = savedJobsData.length;
+
+        const container = document.getElementById('jobsListContainer');
+        if (!container) return;
+
+        if (savedJobsData.length === 0) {
+          container.innerHTML = `
+            <div class="p-12 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-2xl text-xs space-y-2">
+              <div class="text-3xl">🎯</div>
+              <div class="text-slate-300 font-bold">No Scan Jobs Defined Yet</div>
+              <div>Use the form above to create your first reusable scan job with multiple paths and custom settings.</div>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = '';
+        savedJobsData.forEach(job => {
+          const card = document.createElement('div');
+          card.className = 'p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between space-y-4 shadow-lg';
+
+          const isManga = String(job.target_type).toLowerCase().includes('manga');
+          const isDoujin = String(job.target_type).toLowerCase().includes('doujin');
+          const typeBadgeClass = isManga
+            ? 'bg-violet-500/15 text-violet-300 border-violet-500/30'
+            : (isDoujin ? 'bg-pink-500/15 text-pink-300 border-pink-500/30' : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30');
+
+          const targetTitle = isManga ? '📚 Manga / Manhwa' : (isDoujin ? '🌸 Doujinshi' : '⚡ Both Libraries');
+          const modeTitle = (job.mode === 'image') ? '👁️ Visual Hashing' : '⚡ Metadata (Fast)';
+
+          const pathsListHtml = (job.paths || []).map(p => `
+            <div class="flex items-center gap-1.5 text-xs font-mono text-slate-300 bg-slate-950 px-2.5 py-1 rounded border border-slate-800/80 truncate">
+              <span class="text-cyan-400">📁</span>
+              <span class="truncate" title="${p}">${p}</span>
+            </div>
+          `).join('');
+
+          let statusBadge = '<span class="text-[10px] text-slate-500 font-mono">Never executed</span>';
+          if (job.last_status === 'running') {
+            statusBadge = '<span class="text-[10px] text-cyan-400 font-bold scanning-pulse flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> Running now...</span>';
+          } else if (job.last_status === 'completed') {
+            statusBadge = `<span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">✓ Completed (${job.last_duplicates_count || 0} dupes found)</span>`;
+          } else if (job.last_status === 'failed') {
+            statusBadge = '<span class="text-[10px] text-rose-400 font-mono">✗ Last run failed</span>';
+          }
+
+          card.innerHTML = `
+            <div class="space-y-3">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${typeBadgeClass}">
+                      ${targetTitle}
+                    </span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700 bg-slate-950 text-slate-400">
+                      ${modeTitle}
+                    </span>
+                  </div>
+                  <h4 class="text-sm font-extrabold text-slate-100 mt-2">${job.name}</h4>
+                  ${job.description ? `<p class="text-xs text-slate-400 mt-0.5">${job.description}</p>` : ''}
+                </div>
+                <div class="flex items-center gap-1">
+                  <button onclick="editScanJob('${job.id}')" title="Edit this job"
+                          class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition">
+                    ✏️
+                  </button>
+                  <button onclick="deleteScanJob('${job.id}', '${job.name}')" title="Delete this job"
+                          class="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 text-xs transition">
+                    🗑️
+                  </button>
+                </div>
+              </div>
+
+              <!-- Locations (can be multiple) -->
+              <div class="space-y-1">
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Locations (${job.paths ? job.paths.length : 0}):</span>
+                <div class="space-y-1 max-h-24 overflow-y-auto custom-scrollbar">
+                  ${pathsListHtml || '<div class="text-xs text-slate-500 italic">No paths configured.</div>'}
+                </div>
+              </div>
+
+              <!-- Status & Run Info -->
+              <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                <div>${statusBadge}</div>
+                <div class="font-mono text-[10px] text-slate-500">${job.last_run ? `Last run: ${job.last_run}` : `Created: ${job.created_at || ''}`}</div>
+              </div>
+            </div>
+
+            <!-- Execute Button -->
+            <div class="pt-2 border-t border-slate-800 flex items-center gap-2">
+              <button onclick="executeScanJob('${job.id}', '${job.name}')"
+                      class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs text-white shadow-md shadow-cyan-600/30 flex items-center justify-center gap-2 transition">
+                <span>▶️ Run Job Now</span>
+              </button>
+              ${job.last_report_file ? `
+                <button onclick="loadSavedReport('${job.last_report_file}')" title="Open last report in Resolution Window"
+                        class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition whitespace-nowrap">
+                  Open Report
+                </button>
+              ` : ''}
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      } catch (err) {
+        console.error('Failed to load scan jobs:', err);
+      }
+    }
+
+    function appendJobPresetPath(pathStr) {
+      const textarea = document.getElementById('jobPathsInput');
+      if (!textarea) return;
+      const current = textarea.value.trim();
+      if (current) {
+        if (!current.includes(pathStr)) {
+          textarea.value = current + '\n' + pathStr;
+        }
+      } else {
+        textarea.value = pathStr;
+      }
+    }
+
+    function toggleCreateJobForm(open = null) {
+      const panel = document.getElementById('createJobFormPanel');
+      if (!panel) return;
+      if (open === true) {
+        panel.classList.remove('hidden');
+      } else if (open === false) {
+        panel.classList.add('hidden');
+      } else {
+        panel.classList.toggle('hidden');
+      }
+      if (!panel.classList.contains('hidden')) {
+        document.getElementById('jobNameInput').focus();
+      }
+    }
+
+    function cancelJobEdit() {
+      document.getElementById('editJobId').value = '';
+      document.getElementById('jobNameInput').value = '';
+      document.getElementById('jobPathsInput').value = '';
+      document.getElementById('jobDescInput').value = '';
+      document.getElementById('jobFormTitle').innerHTML = '<span>⚡ Create New Scan Job</span>';
+      document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Save Job</span>';
+      document.getElementById('createJobFormPanel').classList.add('hidden');
+    }
+
+    function editScanJob(jobId) {
+      const job = savedJobsData.find(j => j.id === jobId);
+      if (!job) return;
+      document.getElementById('editJobId').value = job.id;
+      document.getElementById('jobNameInput').value = job.name || '';
+      document.getElementById('jobTargetTypeSelect').value = job.target_type || 'manga';
+      document.getElementById('jobPathsInput').value = (job.paths || []).join('\n');
+      document.getElementById('jobModeSelect').value = job.mode || 'name';
+      document.getElementById('jobDescInput').value = job.description || '';
+      document.getElementById('jobFormTitle').innerHTML = `<span>✏️ Edit Scan Job: ${job.name}</span>`;
+      document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Update Job</span>';
+      toggleCreateJobForm(true);
+    }
+
+    async function saveScanJob(andRun = false) {
+      const editId = document.getElementById('editJobId').value;
+      const name = document.getElementById('jobNameInput').value.trim();
+      const target_type = document.getElementById('jobTargetTypeSelect').value;
+      const rawPaths = document.getElementById('jobPathsInput').value;
+      const mode = document.getElementById('jobModeSelect').value;
+      const description = document.getElementById('jobDescInput').value.trim();
+
+      if (!name) {
+        alert('Please enter a friendly name for this Scan Job.');
+        document.getElementById('jobNameInput').focus();
+        return;
+      }
+
+      const paths = rawPaths.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+      if (paths.length === 0) {
+        alert('Please enter at least one target directory path for this scan job.');
+        document.getElementById('jobPathsInput').focus();
+        return;
+      }
+
+      try {
+        let res;
+        let savedJobId = editId;
+
+        if (editId) {
+          res = await fetch(`/api/jobs/${editId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, target_type, paths, mode, description })
+          });
+        } else {
+          res = await fetch('/api/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, target_type, paths, mode, description })
+          });
+        }
+
+        const data = await res.json();
+        if (res.ok) {
+          savedJobId = data.job ? data.job.id : editId;
+          cancelJobEdit();
+          await loadScanJobs();
+          if (andRun && savedJobId) {
+            await executeScanJob(savedJobId, name);
+          }
+        } else {
+          alert('Error saving scan job: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Failed to save scan job: ' + err.message);
+      }
+    }
+
+    async function executeScanJob(jobId, jobName) {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}/run`, {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (res.ok) {
+          // Open and scroll to live console panel
+          const consolePanel = document.getElementById('liveScanConsolePanel');
+          if (consolePanel) {
+            consolePanel.classList.remove('hidden');
+            consolePanel.scrollIntoView({ behavior: 'smooth' });
+          }
+          isLogConsoleOpen = true;
+          const btnToggle = document.getElementById('btnToggleLogs');
+          if (btnToggle) btnToggle.classList.add('bg-cyan-600/30', 'text-cyan-200');
+
+          // Trigger poll rate acceleration
+          setPollRate(750);
+          await loadScanJobs();
+        } else {
+          alert('Failed to launch scan job: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Error running scan job: ' + err.message);
+      }
+    }
+
+    async function deleteScanJob(jobId, jobName) {
+      if (!confirm(`Are you sure you want to delete scan job "${jobName}"?`)) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (res.ok) {
+          await loadScanJobs();
+        } else {
+          alert('Failed to delete job: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Error deleting job: ' + err.message);
+      }
+    }
+
     function switchTab(tab) {
       activeTab = tab;
       document.querySelectorAll('.tab-btn').forEach(b => {
@@ -1016,22 +1545,37 @@
       }
 
       const samplesView = document.getElementById('samplesView');
+      const jobsView = document.getElementById('jobsView');
       const reportsView = document.getElementById('reportsView');
       const cardsContainer = document.getElementById('cardsContainer');
+      const activeViewLabel = document.getElementById('activeViewLabel');
 
       if (tab === 'samples') {
         samplesView.classList.remove('hidden');
+        if (jobsView) jobsView.classList.add('hidden');
         if (reportsView) reportsView.classList.add('hidden');
         cardsContainer.classList.add('hidden');
+        if (activeViewLabel) activeViewLabel.innerText = 'Offline Tree Dumps';
+      } else if (tab === 'jobs') {
+        if (jobsView) jobsView.classList.remove('hidden');
+        samplesView.classList.add('hidden');
+        if (reportsView) reportsView.classList.add('hidden');
+        cardsContainer.classList.add('hidden');
+        if (activeViewLabel) activeViewLabel.innerText = 'Scan Jobs Manager';
+        loadScanJobs();
       } else if (tab === 'reports') {
         if (reportsView) reportsView.classList.remove('hidden');
         samplesView.classList.add('hidden');
+        if (jobsView) jobsView.classList.add('hidden');
         cardsContainer.classList.add('hidden');
+        if (activeViewLabel) activeViewLabel.innerText = 'Saved Reports & History';
         loadReportsAndHistory();
       } else {
         samplesView.classList.add('hidden');
+        if (jobsView) jobsView.classList.add('hidden');
         if (reportsView) reportsView.classList.add('hidden');
         cardsContainer.classList.remove('hidden');
+        if (activeViewLabel) activeViewLabel.innerText = 'Report Resolution Window';
         renderActiveView();
       }
     }
@@ -1489,6 +2033,7 @@
     fetchState();
     loadData();
     loadReportsAndHistory();
+    loadScanJobs();
     setPollRate(3500);
   </script>
 </body>

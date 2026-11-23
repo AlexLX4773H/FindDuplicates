@@ -6,6 +6,7 @@ and click-to-confirm file actions.
 """
 
 import os
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -21,6 +22,7 @@ from src.actions import ActionExecutor
 from src.reporter import export_json, export_csv, export_html
 from src.image_hasher import verify_chapter_similarity, compute_perceptual_hash, compute_hamming_distance
 from src.models import DuplicateGroup, PartialIssue
+from src.web.jobs import job_manager, ScanJobCreatePayload, ScanJobUpdatePayload
 
 app = FastAPI(title="FindDuplicates Dashboard", version="2.1.0")
 
@@ -60,13 +62,15 @@ def add_scan_log(message: str, level: str = "INFO"):
     print(f"[{timestamp}] [{level.upper()}] {message}")
 
 
-def record_run_history(target: str, mode: str, total_scanned: int, duplicates_count: int, partials_count: int, duration_sec: float, report_file: str, status: str = "completed"):
+def record_run_history(target: str, mode: str, total_scanned: int, duplicates_count: int, partials_count: int, duration_sec: float, report_file: str, status: str = "completed", job_name: Optional[str] = None, job_id: Optional[str] = None):
     """Records completed scan runs in persistent history."""
     entry = {
         "id": f"run_{len(STATE['run_history']) + 1}",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "target": target,
         "mode": mode,
+        "job_name": job_name or f"{target.capitalize()} Scan",
+        "job_id": job_id,
         "total_scanned": total_scanned,
         "duplicates_count": duplicates_count,
         "partials_count": partials_count,
@@ -88,18 +92,44 @@ def _init_run_history_from_reports():
         if not rep_dir.exists():
             return
         for idx, f in enumerate(sorted(rep_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True), 1):
+            if f.name == "scan_jobs.json":
+                continue
             try:
                 with open(f, "r", encoding="utf-8") as jf:
                     jdata = json.load(jf)
                     dupes = len(jdata.get("duplicates", []))
                     parts = len(jdata.get("partials", []))
                     scanned = jdata.get("summary", {}).get("total_scanned", dupes)
-                    target = "manga" if "manga" in f.name.lower() else "doujinshi"
+                    meta = jdata.get("metadata", {})
+                    job_name = meta.get("job_name")
+                    job_id = meta.get("job_id")
+                    target = meta.get("target") or ("manga" if "manga" in f.name.lower() else "doujinshi")
+                    mode = meta.get("mode") or "name"
+                    timestamp = meta.get("created_at") or jdata.get("generated_at")
+                    if not timestamp:
+                        timestamp = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        timestamp = str(timestamp).replace("T", " ")[:19]
+
+                    if not job_name:
+                        if "manga" in f.name.lower():
+                            job_name = "Manga / Manhwa Scan"
+                        elif "h_new_b2" in f.name.lower():
+                            job_name = "Offline Tree Dump (h_new_b2)"
+                        elif "h_temp_d" in f.name.lower():
+                            job_name = "Offline Tree Dump (h_temp_d)"
+                        elif "doujin" in f.name.lower():
+                            job_name = "Doujinshi Scan"
+                        else:
+                            job_name = "Saved Scan Report"
+
                     STATE["run_history"].append({
                         "id": f"run_hist_{idx}",
-                        "timestamp": datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                        "timestamp": timestamp,
                         "target": target,
-                        "mode": "name",
+                        "mode": mode,
+                        "job_name": job_name,
+                        "job_id": job_id,
                         "total_scanned": scanned,
                         "duplicates_count": dupes,
                         "partials_count": parts,
@@ -140,6 +170,8 @@ class ScanPayload(BaseModel):
     paths: Optional[List[str]] = None
     manga_paths: Optional[List[str]] = None
     doujinshi_paths: Optional[List[str]] = None
+    job_id: Optional[str] = None
+    job_name: Optional[str] = None
 
 
 @app.get("/api/state")
@@ -218,24 +250,59 @@ def get_casaos_compose():
 
 @app.get("/api/reports")
 def list_reports():
-    """Lists saved reports with metadata, duplicate counts, and available export formats."""
+    """Lists saved reports with metadata, duplicate counts, origin job, creation time, and available export formats."""
     import json
     cfg = load_config()
     rep_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
     reports = []
     if rep_dir.exists():
         for f in sorted(rep_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            if f.name == "scan_jobs.json":
+                continue
+
             dupes_count = 0
             partials_count = 0
             scanned_count = 0
+            job_name = None
+            job_id = None
+            created_at = None
+
             try:
                 with open(f, "r", encoding="utf-8") as jf:
                     jdata = json.load(jf)
                     dupes_count = len(jdata.get("duplicates", []))
                     partials_count = len(jdata.get("partials", []))
                     scanned_count = jdata.get("summary", {}).get("total_scanned", dupes_count)
+                    meta = jdata.get("metadata", {})
+                    job_name = meta.get("job_name")
+                    job_id = meta.get("job_id")
+                    created_at = meta.get("created_at") or jdata.get("generated_at")
             except Exception:
                 pass
+
+            # Fallback for job_name if not in report metadata
+            if not job_name:
+                for r in STATE.get("run_history", []):
+                    if r.get("report_file") == f.name and r.get("job_name"):
+                        job_name = r.get("job_name")
+                        break
+            if not job_name:
+                fname_lower = f.name.lower()
+                if "manga" in fname_lower:
+                    job_name = "Manga / Manhwa Scan"
+                elif "h_new_b2" in fname_lower:
+                    job_name = "Offline Tree Dump (h_new_b2)"
+                elif "h_temp_d" in fname_lower:
+                    job_name = "Offline Tree Dump (h_temp_d)"
+                elif "doujin" in fname_lower:
+                    job_name = "Doujinshi Scan"
+                else:
+                    job_name = "Manual Deduplication Scan"
+
+            if not created_at:
+                created_at = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                created_at = str(created_at).replace("T", " ")[:19]
 
             stem = f.stem
             html_file = rep_dir / f"{stem}.html"
@@ -246,6 +313,9 @@ def list_reports():
                 "stem": stem,
                 "path": str(f),
                 "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+                "created_at": created_at,
+                "job_name": job_name,
+                "job_id": job_id,
                 "size_bytes": f.stat().st_size,
                 "duplicates_count": dupes_count,
                 "partials_count": partials_count,
@@ -259,7 +329,7 @@ def list_reports():
 
     return {
         "reports": reports,
-        "loaded_report_name": STATE.get("loaded_report_name", "latest_report.json"),
+        "loaded_report_name": STATE.get("loaded_report_name"),
         "run_history": STATE.get("run_history", [])
     }
 
@@ -293,6 +363,201 @@ def download_report(filename: str):
         media_type = "application/json; charset=utf-8"
 
     return FileResponse(target, media_type=media_type, filename=target.name)
+
+
+class DeleteReportPayload(BaseModel):
+    filename: str
+
+
+def _execute_report_deletion(filename: str):
+    """Safely removes a report JSON file and its sibling HTML/CSV export files."""
+    cfg = load_config()
+    rep_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
+    target = (rep_dir / filename).resolve()
+
+    if not str(target).startswith(str(rep_dir)):
+        return JSONResponse(status_code=403, content={"error": "Access denied: Invalid file path"})
+
+    deleted_files = []
+    if target.exists() and target.is_file():
+        try:
+            target.unlink()
+            deleted_files.append(target.name)
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": f"Failed to delete {filename}: {e}"})
+
+    # Also clean up sibling export files (.html, .csv, .json) with the same stem
+    stem = target.stem
+    for ext in [".html", ".csv", ".json"]:
+        sibling = rep_dir / f"{stem}{ext}"
+        if sibling.exists() and sibling.is_file() and sibling.name not in deleted_files:
+            try:
+                sibling.unlink()
+                deleted_files.append(sibling.name)
+            except Exception:
+                pass
+
+    if not deleted_files:
+        return JSONResponse(status_code=404, content={"error": f"Report not found: {filename}"})
+
+    # If the deleted report was active in memory, clear the active resolution window
+    if STATE.get("loaded_report_name") in (filename, f"{stem}.json", f"{stem}.html", f"{stem}.csv"):
+        STATE["loaded_report_name"] = None
+        STATE["manga_duplicates"] = []
+        STATE["doujinshi_duplicates"] = []
+        STATE["manga_partials"] = []
+        STATE["total_scanned"] = 0
+        STATE["status_message"] = f"Report '{filename}' removed. Resolution window cleared."
+
+    # Update run history
+    STATE["run_history"] = [
+        r for r in STATE.get("run_history", [])
+        if r.get("report_file") not in (filename, f"{stem}.json", f"{stem}.html", f"{stem}.csv")
+    ]
+
+    add_scan_log(f"Permanently removed report '{filename}' ({len(deleted_files)} files removed: {', '.join(deleted_files)})", "INFO")
+    return {"status": "deleted", "filename": filename, "deleted_files": deleted_files}
+
+
+@app.delete("/api/reports/{filename}")
+def delete_report(filename: str):
+    """Deletes a saved report by filename."""
+    return _execute_report_deletion(filename)
+
+
+@app.post("/api/reports/delete")
+def delete_report_post(payload: DeleteReportPayload):
+    """Deletes a saved report via POST payload."""
+    return _execute_report_deletion(payload.filename)
+
+
+class DiscardReportPayload(BaseModel):
+    delete_file: bool = False
+
+
+@app.post("/api/reports/discard")
+def discard_report(payload: Optional[DiscardReportPayload] = None):
+    """Unloads/discards the active report currently loaded in the Resolution Window."""
+    prev_report = STATE.get("loaded_report_name")
+    delete_file = payload.delete_file if payload else False
+
+    deleted_files = []
+    if delete_file and prev_report:
+        cfg = load_config()
+        rep_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
+        target = (rep_dir / prev_report).resolve()
+        if str(target).startswith(str(rep_dir)):
+            stem = target.stem
+            for ext in [".json", ".html", ".csv"]:
+                sib = rep_dir / f"{stem}{ext}"
+                if sib.exists() and sib.is_file():
+                    try:
+                        sib.unlink()
+                        deleted_files.append(sib.name)
+                    except Exception:
+                        pass
+
+    STATE["manga_duplicates"] = []
+    STATE["doujinshi_duplicates"] = []
+    STATE["manga_partials"] = []
+    STATE["total_scanned"] = 0
+    STATE["loaded_report_name"] = None
+    STATE["status_message"] = "Report discarded. Resolution window is empty."
+    add_scan_log(
+        f"Active report '{prev_report or 'session'}' was discarded from the Resolution Window"
+        + (f" ({len(deleted_files)} files deleted: {', '.join(deleted_files)})" if deleted_files else "") + ".",
+        "WARN"
+    )
+    return {
+        "status": "discarded",
+        "previous_report": prev_report,
+        "deleted_files": deleted_files
+    }
+
+
+# =========================================================================
+# SCAN JOBS API ENDPOINTS
+# =========================================================================
+
+@app.get("/api/jobs")
+def get_scan_jobs():
+    """Returns all user-configured scan jobs."""
+    return {"jobs": job_manager.list_jobs()}
+
+
+@app.post("/api/jobs")
+def create_scan_job(payload: ScanJobCreatePayload):
+    """Creates a new scan job with multiple paths and custom settings."""
+    try:
+        new_job = job_manager.create_job(payload)
+        add_scan_log(f"Created new Scan Job: '{new_job['name']}' ({new_job['target_type'].upper()}, {len(new_job['paths'])} paths)", "SUCCESS")
+        return {"status": "created", "job": new_job}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+@app.get("/api/jobs/{job_id}")
+def get_scan_job(job_id: str):
+    """Retrieves a specific scan job."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": f"Job not found: {job_id}"})
+    return {"job": job}
+
+
+@app.put("/api/jobs/{job_id}")
+def update_scan_job(job_id: str, payload: ScanJobUpdatePayload):
+    """Updates an existing scan job."""
+    updated = job_manager.update_job(job_id, payload)
+    if not updated:
+        return JSONResponse(status_code=404, content={"error": f"Job not found: {job_id}"})
+    add_scan_log(f"Updated Scan Job: '{updated['name']}'", "INFO")
+    return {"status": "updated", "job": updated}
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_scan_job(job_id: str):
+    """Deletes a saved scan job."""
+    success = job_manager.delete_job(job_id)
+    if not success:
+        return JSONResponse(status_code=404, content={"error": f"Job not found: {job_id}"})
+    add_scan_log(f"Deleted Scan Job: {job_id}", "INFO")
+    return {"status": "deleted", "job_id": job_id}
+
+
+@app.post("/api/jobs/{job_id}/run")
+def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
+    """Executes a saved scan job in the background."""
+    if STATE["is_scanning"]:
+        return JSONResponse(status_code=400, content={"error": "A scan is already in progress. Please wait for it to complete."})
+
+    job = job_manager.get_job(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": f"Job not found: {job_id}"})
+
+    job_manager.update_job_run_status(job_id, status="running")
+    target = job.get("target_type", "manga")
+    mode = job.get("mode", "name")
+    paths = job.get("paths", [])
+
+    background_tasks.add_task(
+        _run_background_scan,
+        target=target,
+        mode=mode,
+        paths=paths,
+        manga_paths=paths if target in ("manga", "all") else None,
+        doujinshi_paths=paths if target in ("doujinshi", "all") else None,
+        job_id=job["id"],
+        job_name=job["name"]
+    )
+
+    add_scan_log(f"Executing Scan Job '{job['name']}' across {len(paths)} locations...", "INFO")
+    return {
+        "status": "started",
+        "job_id": job_id,
+        "job_name": job["name"],
+        "message": f"Scan Job '{job['name']}' launched in background."
+    }
 
 
 class LoadReportPayload(BaseModel):
@@ -465,20 +730,23 @@ def run_parse_tree(payload: ParseTreePayload):
         }
 
 
-def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]]):
+def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None):
     start_time = datetime.now()
     STATE["is_scanning"] = True
-    STATE["status_message"] = f"Starting scan for {target} ({mode}-based)..."
+    display_title = job_name or f"{target} ({mode}-based)"
+    STATE["status_message"] = f"Starting scan for {display_title}..."
     STATE["scan_progress"] = "Resolving target directories..."
     STATE["active_scan_info"] = {
         "target": target,
         "mode": mode,
+        "job_name": job_name,
+        "job_id": job_id,
         "started_at": start_time.strftime("%H:%M:%S"),
         "status": "running",
         "elapsed_seconds": 0
     }
 
-    add_scan_log(f"🚀 Initializing scan job: Target='{target.upper()}', Mode='{mode.upper()}'", "INFO")
+    add_scan_log(f"🚀 Initializing scan job: '{display_title}' (Target='{target.upper()}', Mode='{mode.upper()}')", "INFO")
 
     try:
         cfg = load_config()
@@ -622,15 +890,48 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
         all_dupes = STATE["manga_duplicates"] + STATE["doujinshi_duplicates"]
         all_parts = STATE["manga_partials"]
 
-        add_scan_log(f"Generating reports in '{reports_dir}'...", "INFO")
-        export_json(all_dupes, all_parts, str(reports_dir / "latest_report.json"))
-        export_csv(all_dupes, str(reports_dir / "latest_report.csv"))
-        export_html(all_dupes, all_parts, STATE["total_scanned"], str(reports_dir / "latest_report.html"))
-        add_scan_log("Saved latest_report.json, latest_report.csv, and latest_report.html", "SUCCESS")
+        effective_job_name = job_name or f"Manual {target.capitalize()} Scan"
+        report_meta = {
+            "job_id": job_id or "manual",
+            "job_name": effective_job_name,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "target": target,
+            "mode": mode,
+            "paths": [str(p) for p in (m_targets + d_targets)]
+        }
+
+        # Determine primary report file name
+        if job_name:
+            slug = re.sub(r'[^a-zA-Z0-9_-]+', '_', job_name.lower()).strip('_')
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            primary_rep_json = f"{slug}_{ts}_report.json"
+            primary_rep_html = f"{slug}_{ts}_report.html"
+            primary_rep_csv = f"{slug}_{ts}_report.csv"
+        else:
+            primary_rep_json = "latest_report.json"
+            primary_rep_html = "latest_report.html"
+            primary_rep_csv = "latest_report.csv"
+
+        add_scan_log(f"Generating reports in '{reports_dir}' ({primary_rep_json})...", "INFO")
+        export_json(all_dupes, all_parts, str(reports_dir / primary_rep_json), extra_meta=report_meta)
+        export_csv(all_dupes, str(reports_dir / primary_rep_csv))
+        export_html(all_dupes, all_parts, STATE["total_scanned"], str(reports_dir / primary_rep_html))
+
+        # Always update latest_report.* copies as well
+        if primary_rep_json != "latest_report.json":
+            export_json(all_dupes, all_parts, str(reports_dir / "latest_report.json"), extra_meta=report_meta)
+            export_csv(all_dupes, str(reports_dir / "latest_report.csv"))
+            export_html(all_dupes, all_parts, STATE["total_scanned"], str(reports_dir / "latest_report.html"))
+
+        add_scan_log(f"Saved {primary_rep_json}, {primary_rep_csv}, and {primary_rep_html}", "SUCCESS")
 
         elapsed = round((datetime.now() - start_time).total_seconds(), 2)
         STATE["last_scan_time"] = datetime.now().isoformat()
-        STATE["loaded_report_name"] = "latest_report.json"
+        STATE["loaded_report_name"] = primary_rep_json
+
+        if job_id:
+            job_manager.update_job_run_status(job_id, status="completed", report_file=primary_rep_json, duplicates_count=len(all_dupes))
+
         record_run_history(
             target=target,
             mode=mode,
@@ -638,8 +939,10 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             duplicates_count=len(all_dupes),
             partials_count=len(all_parts),
             duration_sec=elapsed,
-            report_file="latest_report.json",
-            status="completed"
+            report_file=primary_rep_json,
+            status="completed",
+            job_name=effective_job_name,
+            job_id=job_id
         )
         STATE["status_message"] = (
             f"Scan finished in {elapsed}s: {len(STATE['manga_duplicates'])} manga and "
@@ -658,6 +961,8 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
     except Exception as e:
         import traceback
         traceback.print_exc()
+        if job_id:
+            job_manager.update_job_run_status(job_id, status="failed")
         add_scan_log(f"❌ Scan failed with error: {e}", "ERROR")
         STATE["status_message"] = f"Scan error: {e}"
         STATE["scan_progress"] = f"Error: {e}"
@@ -679,8 +984,14 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
         mode=payload.mode,
         paths=payload.paths,
         manga_paths=payload.manga_paths,
-        doujinshi_paths=payload.doujinshi_paths
+        doujinshi_paths=payload.doujinshi_paths,
+        job_id=payload.job_id,
+        job_name=payload.job_name
     )
+    return {
+        "status": "started",
+        "message": f"Scan triggered for target '{payload.target}' using {payload.mode}-based modality."
+    }
     return {
         "status": "started",
         "message": f"Scan triggered for target '{payload.target}' using {payload.mode}-based modality."
