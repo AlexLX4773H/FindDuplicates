@@ -42,7 +42,7 @@ def run_manga_job(args, cfg):
     print("[*] Running intra-series detection...")
 
     duplicates = detect_manga_duplicates(chapters)
-    partials = detect_manga_partials(chapters, min_page_ratio=cfg.get("detection", {}).get("min_page_ratio", 0.60))
+    partials = detect_manga_partials(chapters, min_page_ratio=cfg.get("detection", {}).get("min_page_ratio", 0.60), check_mode=args.by)
 
     if args.by == "image":
         print("[*] Running image perceptual hash verification on duplicate chapter candidates...")
@@ -136,7 +136,7 @@ def run_parse_tree_job(args, cfg):
 
     if tree_type == "manga":
         duplicates = detect_manga_duplicates(items)
-        partials = detect_manga_partials(items)
+        partials = detect_manga_partials(items, check_mode="name")
         export_terminal(duplicates, partials, len(items))
         export_json(duplicates, partials, str(output_dir / f"{target_file.stem}_report.json"))
         export_csv(duplicates, str(output_dir / f"{target_file.stem}_report.csv"))

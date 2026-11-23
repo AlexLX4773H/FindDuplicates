@@ -172,6 +172,7 @@ class ScanPayload(BaseModel):
     doujinshi_paths: Optional[List[str]] = None
     job_id: Optional[str] = None
     job_name: Optional[str] = None
+    excluded_manga: Optional[List[str]] = None
 
 
 @app.get("/api/state")
@@ -539,6 +540,7 @@ def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
     target = job.get("target_type", "manga")
     mode = job.get("mode", "name")
     paths = job.get("paths", [])
+    excluded_manga = job.get("excluded_manga", [])
 
     background_tasks.add_task(
         _run_background_scan,
@@ -548,7 +550,8 @@ def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
         manga_paths=paths if target in ("manga", "all") else None,
         doujinshi_paths=paths if target in ("doujinshi", "all") else None,
         job_id=job["id"],
-        job_name=job["name"]
+        job_name=job["name"],
+        excluded_manga=excluded_manga
     )
 
     add_scan_log(f"Executing Scan Job '{job['name']}' across {len(paths)} locations...", "INFO")
@@ -677,7 +680,7 @@ def run_parse_tree(payload: ParseTreePayload):
     if detected_type == "manga":
         add_scan_log(f"Running intra-series duplicate detection on {len(parsed_items):,} manga chapters...", "INFO")
         dupes = detect_manga_duplicates(parsed_items)
-        parts = detect_manga_partials(parsed_items)
+        parts = detect_manga_partials(parsed_items, check_mode="name")
         STATE["manga_duplicates"] = dupes
         STATE["manga_partials"] = parts
         STATE["total_scanned"] = len(parsed_items)
@@ -730,7 +733,7 @@ def run_parse_tree(payload: ParseTreePayload):
         }
 
 
-def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None):
+def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None, excluded_manga: Optional[List[str]] = None):
     start_time = datetime.now()
     STATE["is_scanning"] = True
     display_title = job_name or f"{target} ({mode}-based)"
@@ -747,6 +750,8 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
     }
 
     add_scan_log(f"🚀 Initializing scan job: '{display_title}' (Target='{target.upper()}', Mode='{mode.upper()}')", "INFO")
+    if excluded_manga:
+        add_scan_log(f"Manga exclusions applied ({len(excluded_manga)} titles): {', '.join(excluded_manga[:4])}{'...' if len(excluded_manga) > 4 else ''}", "INFO")
 
     try:
         cfg = load_config()
@@ -808,7 +813,8 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
                     add_scan_log(f"Walking Manga directory: '{mp.name}'...", "SCAN")
                     found = scan_manga_directory(
                         mp,
-                        progress_callback=lambda msg, lvl="SCAN": add_scan_log(msg, lvl)
+                        progress_callback=lambda msg, lvl="SCAN": add_scan_log(msg, lvl),
+                        excluded_manga=excluded_manga
                     )
                     chapters.extend(found)
                     add_scan_log(f"Accumulated {len(found)} chapters from '{mp.name}'.", "INFO")
@@ -817,7 +823,7 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
 
             add_scan_log(f"Running intra-series duplicate detector on {len(chapters)} manga chapters...", "INFO")
             dupes = detect_manga_duplicates(chapters)
-            parts = detect_manga_partials(chapters)
+            parts = detect_manga_partials(chapters, check_mode=mode)
             add_scan_log(f"Detected {len(dupes)} duplicate groups and {len(parts)} partial chapter issues.", "SUCCESS" if len(dupes) > 0 else "INFO")
 
             if mode == "image":
@@ -986,12 +992,9 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
         manga_paths=payload.manga_paths,
         doujinshi_paths=payload.doujinshi_paths,
         job_id=payload.job_id,
-        job_name=payload.job_name
+        job_name=payload.job_name,
+        excluded_manga=payload.excluded_manga
     )
-    return {
-        "status": "started",
-        "message": f"Scan triggered for target '{payload.target}' using {payload.mode}-based modality."
-    }
     return {
         "status": "started",
         "message": f"Scan triggered for target '{payload.target}' using {payload.mode}-based modality."

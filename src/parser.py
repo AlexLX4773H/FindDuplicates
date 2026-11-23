@@ -258,7 +258,7 @@ def parse_doujinshi_name(raw_name: str, file_path: str = "") -> DoujinshiWork:
 # Raw Tree Dump Ingestion
 # ==============================================================================
 
-def parse_tree_dump_lines(lines: List[str]) -> Tuple[str, List[Any]]:
+def parse_tree_dump_lines(lines: List[str], excluded_manga: Optional[List[str]] = None) -> Tuple[str, List[Any]]:
     """
     Parses Windows 'tree /a' or 'tree /f' output lines.
     Automatically detects whether the tree is a Manga 4-level structure or Doujinshi tree.
@@ -266,6 +266,7 @@ def parse_tree_dump_lines(lines: List[str]) -> Tuple[str, List[Any]]:
     """
     stack: List[str] = []
     nodes: List[List[str]] = []
+    excluded_set = {ex.strip().lower() for ex in (excluded_manga or []) if ex.strip()}
 
     for line in lines:
         m = re.match(r'^(\s*(?:[|\xa6]\s*)*)\+---(.*)', line)
@@ -293,6 +294,12 @@ def parse_tree_dump_lines(lines: List[str]) -> Tuple[str, List[Any]]:
                 status_cat = path_parts[1]
                 series_name = path_parts[2]
                 chapter_name = path_parts[3]
+
+                if excluded_set:
+                    clean = clean_series_name(series_name).lower()
+                    s_lower = series_name.lower()
+                    if any(ex in s_lower or ex == clean for ex in excluded_set):
+                        continue
 
                 item = parse_manga_chapter_name(chapter_name, series_name, "/".join(path_parts))
                 item.volume_root = vol_root

@@ -197,35 +197,27 @@
     <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 glass p-4 rounded-2xl">
       <!-- Tabs -->
       <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
-        <button onclick="switchTab('manga')" id="tab-manga" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 text-white shadow-sm flex items-center gap-1.5">
-          <span>📚 Manga (Intra)</span>
+        <button onclick="switchTab('report')" id="tab-report" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 text-white shadow-sm flex items-center gap-1.5 transition">
+          <span>📄 Report</span>
+          <span id="tabReportDuplicatesBadge" class="bg-white/20 text-white text-[10px] px-1.5 py-0.2 rounded-full border border-white/30">0</span>
         </button>
-        <button onclick="switchTab('doujinshi')" id="tab-doujinshi" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
-          <span>🌸 Doujinshi (Global)</span>
-        </button>
-        <button onclick="switchTab('partials')" id="tab-partials" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
-          <span>⚠️ Partials / Splits</span>
-        </button>
-        <button onclick="switchTab('samples')" id="tab-samples" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
-          <span>📂 Offline Tree Dumps</span>
-        </button>
-        <button onclick="switchTab('jobs')" id="tab-jobs" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+        <button onclick="switchTab('jobs')" id="tab-jobs" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 transition">
           <span>🎯 Scan Jobs</span>
           <span id="tabJobsCountBadge" class="bg-cyan-500/20 text-cyan-300 text-[10px] px-1.5 py-0.2 rounded-full border border-cyan-500/30">0</span>
         </button>
-        <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5">
+        <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 transition">
           <span>📂 Saved Reports</span>
           <span id="tabReportsCountBadge" class="bg-violet-500/20 text-violet-300 text-[10px] px-1.5 py-0.2 rounded-full border border-violet-500/30">0</span>
         </button>
+        <button onclick="switchTab('samples')" id="tab-samples" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 transition">
+          <span>📂 Offline Tree Dumps</span>
+        </button>
       </div>
 
-      <!-- Quick Actions & Search -->
-      <div class="flex items-center gap-3">
-        <input id="searchInput" type="text" placeholder="Filter duplicate items..."
-               class="bg-slate-900 border border-slate-700 px-3.5 py-1.5 rounded-xl text-xs focus:outline-none focus:border-violet-500 w-48 md:w-64">
-        <button onclick="autoSelectRecommended()" title="Marks recommended highest quality copy to stay, and duplicates to be moved to archive"
-                class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">
-          ✨ Pre-Select Best
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-2">
+        <button onclick="openScanModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs text-white shadow-md shadow-cyan-600/30 flex items-center gap-1.5 transition">
+          <span>🚀 Run Scan</span>
         </button>
       </div>
     </div>
@@ -362,6 +354,20 @@
           </div>
         </div>
 
+        <!-- Manga Exclusion List (Configurable per Job) -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-slate-300">
+              Manga Exclusion List <span class="text-amber-400 font-normal">(Optional &mdash; enter Manga series/folder names to skip, one per line)</span>:
+            </label>
+            <span class="text-[10px] text-slate-500 font-mono">Case-insensitive title matching</span>
+          </div>
+          <textarea id="jobExclusionsInput" rows="2"
+                    placeholder="e.g. Flag Capture in the First Move&#10;Retired Heroes&#10;One Piece"
+                    class="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-xl text-xs font-mono text-slate-100 focus:outline-none focus:border-amber-500 custom-scrollbar"></textarea>
+          <p class="text-[11px] text-slate-500">Manga series matching these titles will be completely skipped during the scan.</p>
+        </div>
+
         <!-- Buttons -->
         <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
           <button type="button" onclick="cancelJobEdit()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition">
@@ -449,10 +455,57 @@
       </div>
     </div>
 
-    <!-- Cards Container: The Report Resolution Window -->
-    <div id="cardsContainer" class="space-y-4">
-      <div class="p-12 text-center text-slate-500 glass rounded-2xl">
-        Loading duplicate groups from report...
+    <!-- Tab Content: Report Resolution Window (Dedicated Report Tab) -->
+    <div id="reportViewContainer" class="space-y-4">
+      <!-- Report Controls Bar: Sub-filters, Keep All button, Pre-Select Best, Search -->
+      <div id="reportControlsBar" class="glass p-3.5 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border border-slate-800">
+        <!-- Sub-filters -->
+        <div class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+          <button onclick="setReportFilter('all')" id="subfilter-all"
+                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white flex items-center gap-1.5 transition shadow-sm">
+            <span>All Duplicates</span>
+            <span id="subfilterCountAll" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+          </button>
+          <button onclick="setReportFilter('manga')" id="subfilter-manga"
+                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition">
+            <span>📚 Manga</span>
+            <span id="subfilterCountManga" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+          </button>
+          <button onclick="setReportFilter('doujinshi')" id="subfilter-doujinshi"
+                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition">
+            <span>🌸 Doujinshi</span>
+            <span id="subfilterCountDoujinshi" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+          </button>
+          <button onclick="setReportFilter('partials')" id="subfilter-partials"
+                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition">
+            <span>⚠️ Partials / Splits</span>
+            <span id="subfilterCountPartials" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+          </button>
+        </div>
+
+        <!-- Quick Actions & Search -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- KEEP ALL BUTTON: Keeps both duplicates across all groups -->
+          <button onclick="keepAllDuplicates()" id="btnKeepAll"
+                  title="Keep Both Duplicates: Marks all items across all duplicate groups to 'Keep' so nothing is moved or deleted"
+                  class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white shadow-md shadow-emerald-600/30 transition flex items-center gap-1.5">
+            <span>🛡️ Keep All</span>
+          </button>
+          <button onclick="autoSelectRecommended()"
+                  title="Marks recommended highest quality copy to stay, and duplicates to be moved to archive"
+                  class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+            <span>✨ Pre-Select Best</span>
+          </button>
+          <input id="searchInput" type="text" placeholder="Filter duplicate items..."
+                 class="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl text-xs focus:outline-none focus:border-violet-500 w-44 md:w-56 text-slate-200">
+        </div>
+      </div>
+
+      <!-- Cards Container: The Report Resolution Window -->
+      <div id="cardsContainer" class="space-y-4">
+        <div class="p-12 text-center text-slate-500 glass rounded-2xl">
+          Loading duplicate groups from report...
+        </div>
       </div>
     </div>
 
@@ -748,9 +801,12 @@
   </div>
 
   <script>
-    let activeTab = 'manga';
+    let activeTab = 'report';
+    let reportSubFilter = 'all';
     let duplicatesData = [];
     let partialsData = [];
+    let filteredGroups = [];
+    let itemRegistry = [];
     let selectedActions = {};
     let isScanning = false;
     let lastLogId = 0;
@@ -1022,6 +1078,28 @@
       }
     }
 
+    function updateReportCounters() {
+      const mangaCount = duplicatesData.filter(g => g.target_type === 'manga').length;
+      const doujinCount = duplicatesData.filter(g => g.target_type === 'doujinshi').length;
+      const totalDupes = duplicatesData.length;
+      const partialsCount = partialsData.length;
+
+      const tabBadge = document.getElementById('tabReportDuplicatesBadge');
+      if (tabBadge) tabBadge.innerText = totalDupes;
+
+      const countAll = document.getElementById('subfilterCountAll');
+      if (countAll) countAll.innerText = totalDupes;
+
+      const countManga = document.getElementById('subfilterCountManga');
+      if (countManga) countManga.innerText = mangaCount;
+
+      const countDoujin = document.getElementById('subfilterCountDoujinshi');
+      if (countDoujin) countDoujin.innerText = doujinCount;
+
+      const countPartials = document.getElementById('subfilterCountPartials');
+      if (countPartials) countPartials.innerText = partialsCount;
+    }
+
     async function loadData() {
       try {
         const [dupesRes, partsRes] = await Promise.all([
@@ -1030,6 +1108,7 @@
         ]);
         duplicatesData = await dupesRes.json();
         partialsData = await partsRes.json();
+        updateReportCounters();
         renderActiveView();
         updateActionBadge();
       } catch (e) {
@@ -1059,12 +1138,15 @@
         });
         const data = await res.json();
         if (res.ok) {
-          mangaData = [];
-          doujinshiData = [];
-          partialsData = [];
           duplicatesData = [];
-          updateStats();
+          partialsData = [];
+          itemRegistry = [];
+          filteredGroups = [];
+          selectedActions = {};
+          updateReportCounters();
+          updateActionBadge();
           updateActiveReportLinks(null);
+          await fetchState();
           const container = document.getElementById('cardsContainer');
           if (container) {
             container.innerHTML = `
@@ -1326,16 +1408,21 @@
                     <span class="px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700 bg-slate-950 text-slate-400">
                       ${modeTitle}
                     </span>
+                    ${(job.excluded_manga && job.excluded_manga.length > 0) ? `
+                      <span class="px-2 py-0.5 rounded text-[10px] font-mono border border-amber-500/40 bg-amber-950/40 text-amber-300" title="Excluded: ${escapeHtml(job.excluded_manga.join(', '))}">
+                        🚫 ${job.excluded_manga.length} Excluded
+                      </span>
+                    ` : ''}
                   </div>
-                  <h4 class="text-sm font-extrabold text-slate-100 mt-2">${job.name}</h4>
-                  ${job.description ? `<p class="text-xs text-slate-400 mt-0.5">${job.description}</p>` : ''}
+                  <h4 class="text-sm font-extrabold text-slate-100 mt-2">${escapeHtml(job.name)}</h4>
+                  ${job.description ? `<p class="text-xs text-slate-400 mt-0.5">${escapeHtml(job.description)}</p>` : ''}
                 </div>
                 <div class="flex items-center gap-1">
                   <button onclick="editScanJob('${job.id}')" title="Edit this job"
                           class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition">
                     ✏️
                   </button>
-                  <button onclick="deleteScanJob('${job.id}', '${job.name}')" title="Delete this job"
+                  <button onclick="deleteScanJob('${job.id}')" title="Delete this job"
                           class="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 text-xs transition">
                     🗑️
                   </button>
@@ -1350,6 +1437,16 @@
                 </div>
               </div>
 
+              <!-- Excluded Manga (if configured) -->
+              ${(job.excluded_manga && job.excluded_manga.length > 0) ? `
+                <div class="space-y-1">
+                  <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Manga Exclusions (${job.excluded_manga.length}):</span>
+                  <div class="flex flex-wrap gap-1 max-h-16 overflow-y-auto custom-scrollbar">
+                    ${job.excluded_manga.map(ex => `<span class="px-2 py-0.5 rounded text-[10px] bg-slate-950 border border-amber-800/60 text-amber-300 font-mono">${escapeHtml(ex)}</span>`).join('')}
+                  </div>
+                </div>
+              ` : ''}
+
               <!-- Status & Run Info -->
               <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
                 <div>${statusBadge}</div>
@@ -1359,7 +1456,7 @@
 
             <!-- Execute Button -->
             <div class="pt-2 border-t border-slate-800 flex items-center gap-2">
-              <button onclick="executeScanJob('${job.id}', '${job.name}')"
+              <button onclick="executeScanJob('${job.id}')"
                       class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs text-white shadow-md shadow-cyan-600/30 flex items-center justify-center gap-2 transition">
                 <span>▶️ Run Job Now</span>
               </button>
@@ -1411,6 +1508,7 @@
       document.getElementById('jobNameInput').value = '';
       document.getElementById('jobPathsInput').value = '';
       document.getElementById('jobDescInput').value = '';
+      document.getElementById('jobExclusionsInput').value = '';
       document.getElementById('jobFormTitle').innerHTML = '<span>⚡ Create New Scan Job</span>';
       document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Save Job</span>';
       document.getElementById('createJobFormPanel').classList.add('hidden');
@@ -1425,7 +1523,8 @@
       document.getElementById('jobPathsInput').value = (job.paths || []).join('\n');
       document.getElementById('jobModeSelect').value = job.mode || 'name';
       document.getElementById('jobDescInput').value = job.description || '';
-      document.getElementById('jobFormTitle').innerHTML = `<span>✏️ Edit Scan Job: ${job.name}</span>`;
+      document.getElementById('jobExclusionsInput').value = (job.excluded_manga || []).join('\n');
+      document.getElementById('jobFormTitle').innerHTML = `<span>✏️ Edit Scan Job: ${escapeHtml(job.name)}</span>`;
       document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Update Job</span>';
       toggleCreateJobForm(true);
     }
@@ -1437,6 +1536,8 @@
       const rawPaths = document.getElementById('jobPathsInput').value;
       const mode = document.getElementById('jobModeSelect').value;
       const description = document.getElementById('jobDescInput').value.trim();
+      const rawExclusions = document.getElementById('jobExclusionsInput').value;
+      const excluded_manga = rawExclusions.split('\n').map(p => p.trim()).filter(p => p.length > 0);
 
       if (!name) {
         alert('Please enter a friendly name for this Scan Job.');
@@ -1454,18 +1555,19 @@
       try {
         let res;
         let savedJobId = editId;
+        const payloadObj = { name, target_type, paths, mode, description, excluded_manga };
 
         if (editId) {
           res = await fetch(`/api/jobs/${editId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, target_type, paths, mode, description })
+            body: JSON.stringify(payloadObj)
           });
         } else {
           res = await fetch('/api/jobs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, target_type, paths, mode, description })
+            body: JSON.stringify(payloadObj)
           });
         }
 
@@ -1475,7 +1577,7 @@
           cancelJobEdit();
           await loadScanJobs();
           if (andRun && savedJobId) {
-            await executeScanJob(savedJobId, name);
+            await executeScanJob(savedJobId);
           }
         } else {
           alert('Error saving scan job: ' + (data.error || 'Unknown error'));
@@ -1485,7 +1587,7 @@
       }
     }
 
-    async function executeScanJob(jobId, jobName) {
+    async function executeScanJob(jobId) {
       try {
         const res = await fetch(`/api/jobs/${jobId}/run`, {
           method: 'POST'
@@ -1513,7 +1615,9 @@
       }
     }
 
-    async function deleteScanJob(jobId, jobName) {
+    async function deleteScanJob(jobId) {
+      const job = savedJobsData.find(j => j.id === jobId);
+      const jobName = job ? job.name : jobId;
       if (!confirm(`Are you sure you want to delete scan job "${jobName}"?`)) {
         return;
       }
@@ -1533,7 +1637,12 @@
     }
 
     function switchTab(tab) {
+      if (['manga', 'doujinshi', 'partials'].includes(tab)) {
+        reportSubFilter = tab;
+        tab = 'report';
+      }
       activeTab = tab;
+
       document.querySelectorAll('.tab-btn').forEach(b => {
         b.classList.remove('bg-violet-600', 'text-white');
         b.classList.add('bg-slate-900', 'text-slate-300');
@@ -1547,46 +1656,101 @@
       const samplesView = document.getElementById('samplesView');
       const jobsView = document.getElementById('jobsView');
       const reportsView = document.getElementById('reportsView');
-      const cardsContainer = document.getElementById('cardsContainer');
+      const reportViewContainer = document.getElementById('reportViewContainer');
       const activeViewLabel = document.getElementById('activeViewLabel');
 
       if (tab === 'samples') {
         samplesView.classList.remove('hidden');
         if (jobsView) jobsView.classList.add('hidden');
         if (reportsView) reportsView.classList.add('hidden');
-        cardsContainer.classList.add('hidden');
+        if (reportViewContainer) reportViewContainer.classList.add('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Offline Tree Dumps';
       } else if (tab === 'jobs') {
         if (jobsView) jobsView.classList.remove('hidden');
         samplesView.classList.add('hidden');
         if (reportsView) reportsView.classList.add('hidden');
-        cardsContainer.classList.add('hidden');
+        if (reportViewContainer) reportViewContainer.classList.add('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Scan Jobs Manager';
         loadScanJobs();
       } else if (tab === 'reports') {
         if (reportsView) reportsView.classList.remove('hidden');
         samplesView.classList.add('hidden');
         if (jobsView) jobsView.classList.add('hidden');
-        cardsContainer.classList.add('hidden');
+        if (reportViewContainer) reportViewContainer.classList.add('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Saved Reports & History';
         loadReportsAndHistory();
       } else {
         samplesView.classList.add('hidden');
         if (jobsView) jobsView.classList.add('hidden');
         if (reportsView) reportsView.classList.add('hidden');
-        cardsContainer.classList.remove('hidden');
+        if (reportViewContainer) reportViewContainer.classList.remove('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Report Resolution Window';
+        updateSubfilterButtons();
         renderActiveView();
+      }
+    }
+
+    function setReportFilter(sub) {
+      reportSubFilter = sub;
+      updateSubfilterButtons();
+      renderActiveView();
+    }
+
+    function updateSubfilterButtons() {
+      const filters = ['all', 'manga', 'doujinshi', 'partials'];
+      filters.forEach(f => {
+        const btn = document.getElementById(`subfilter-${f}`);
+        if (!btn) return;
+        if (reportSubFilter === f) {
+          btn.className = 'subfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white flex items-center gap-1.5 transition shadow-sm';
+        } else {
+          btn.className = 'subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition';
+        }
+      });
+    }
+
+    function keepAllDuplicates() {
+      if (duplicatesData.length === 0) {
+        alert('No duplicates loaded in the current report.');
+        return;
+      }
+      duplicatesData.forEach(g => {
+        g.items.forEach(it => {
+          const path = it.file_path || it.raw_name || it.work_name;
+          if (path) {
+            selectedActions[path] = 'keep';
+          }
+        });
+      });
+      renderActiveView();
+      updateActionBadge();
+    }
+
+    function keepGroupDuplicates(groupIndex) {
+      const g = filteredGroups[groupIndex];
+      if (g && g.items) {
+        g.items.forEach(it => {
+          const path = it.file_path || it.raw_name || it.work_name;
+          if (path) {
+            selectedActions[path] = 'keep';
+          }
+        });
+        renderActiveView();
+        updateActionBadge();
       }
     }
 
     function renderActiveView() {
       const container = document.getElementById('cardsContainer');
-      const query = document.getElementById('searchInput').value.toLowerCase();
+      if (!container) return;
+      const searchInput = document.getElementById('searchInput');
+      const query = (searchInput ? searchInput.value : '').toLowerCase();
       container.innerHTML = '';
+      itemRegistry = [];
+      filteredGroups = [];
 
-      if (activeTab === 'partials') {
-        const filtered = partialsData.filter(p => !query || p.series_name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query));
+      if (reportSubFilter === 'partials') {
+        const filtered = partialsData.filter(p => !query || (p.series_name || '').toLowerCase().includes(query) || (p.description || '').toLowerCase().includes(query));
         if (filtered.length === 0) {
           container.innerHTML = '<div class="p-12 text-center text-slate-500 glass rounded-2xl">No partial chapter issues match filter.</div>';
           return;
@@ -1596,19 +1760,19 @@
           card.className = 'glass p-5 rounded-2xl border-l-4 border-l-amber-500 space-y-2';
           card.innerHTML = `
             <div class="flex items-center justify-between">
-              <h3 class="text-base font-bold text-slate-100">${p.series_name}</h3>
-              <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">${p.issue_type}</span>
+              <h3 class="text-base font-bold text-slate-100">${escapeHtml(p.series_name)}</h3>
+              <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">${escapeHtml(p.issue_type)}</span>
             </div>
-            <p class="text-xs text-slate-300">${p.description}</p>
+            <p class="text-xs text-slate-300">${escapeHtml(p.description)}</p>
           `;
           container.appendChild(card);
         });
         return;
       }
 
-      const filtered = duplicatesData.filter(g => {
-        if (activeTab === 'manga' && g.target_type !== 'manga') return false;
-        if (activeTab === 'doujinshi' && g.target_type !== 'doujinshi') return false;
+      filteredGroups = duplicatesData.filter(g => {
+        if (reportSubFilter === 'manga' && g.target_type !== 'manga') return false;
+        if (reportSubFilter === 'doujinshi' && g.target_type !== 'doujinshi') return false;
         if (query) {
           const tMatch = (g.title || '').toLowerCase().includes(query);
           const sMatch = (g.sub_title || '').toLowerCase().includes(query);
@@ -1618,14 +1782,20 @@
         return true;
       });
 
-      if (filtered.length === 0) {
-        container.innerHTML = `<div class="p-12 text-center text-slate-500 glass rounded-2xl">No ${activeTab} duplicates found in current report. Click <strong>"🚀 Run Scan"</strong> or load a saved report.</div>`;
+      if (filteredGroups.length === 0) {
+        container.innerHTML = `<div class="p-12 text-center text-slate-500 glass rounded-2xl">No ${reportSubFilter === 'all' ? '' : reportSubFilter + ' '}duplicates found in current report. Click <strong>"🚀 Run Scan"</strong> or choose a report from <strong>"📂 Saved Reports"</strong>.</div>`;
         return;
       }
 
-      filtered.forEach(g => {
+      filteredGroups.forEach((g, gIdx) => {
         const card = document.createElement('div');
         card.className = 'glass p-5 rounded-2xl space-y-4';
+
+        // Check if all items in this group are set to 'keep'
+        const allKeptInGroup = g.items.every(it => {
+          const path = it.file_path || it.raw_name || it.work_name;
+          return selectedActions[path] === 'keep';
+        });
 
         let itemsHtml = g.items.map(it => {
           const name = it.raw_name || it.work_name || '';
@@ -1638,36 +1808,43 @@
           }
           const curAction = selectedActions[path];
 
+          // Use safe numeric indexing in itemRegistry to prevent ANY apostrophe/quote syntax error
+          let itemIdx = itemRegistry.indexOf(path);
+          if (itemIdx === -1) {
+            itemIdx = itemRegistry.length;
+            itemRegistry.push(path);
+          }
+
           return `
             <div class="flex flex-col md:flex-row md:items-center justify-between p-3.5 rounded-xl border ${curAction === 'keep' ? 'bg-emerald-950/20 border-emerald-800/50' : curAction === 'delete' ? 'bg-rose-950/20 border-rose-800/50' : 'bg-amber-950/20 border-amber-800/50'} text-xs gap-3">
               <div class="space-y-1 min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span class="font-bold text-slate-200 text-sm">${name}</span>
+                  <span class="font-bold text-slate-200 text-sm">${escapeHtml(name)}</span>
                   ${isKeeper ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] border border-emerald-500/30">RECOMMENDED BEST</span>' : ''}
                   ${it.is_hq ? '<span class="px-1.5 py-0.2 rounded bg-violet-900/50 text-violet-300 font-semibold text-[10px]">HQ</span>' : ''}
                   ${it.is_fixed ? '<span class="px-1.5 py-0.2 rounded bg-cyan-900/50 text-cyan-300 font-semibold text-[10px]">FIXED</span>' : ''}
                   ${it.is_decensored ? '<span class="px-1.5 py-0.2 rounded bg-pink-900/50 text-pink-300 font-semibold text-[10px]">DECENSORED</span>' : ''}
                   ${it.is_digital ? '<span class="px-1.5 py-0.2 rounded bg-blue-900/50 text-blue-300 font-semibold text-[10px]">DIGITAL</span>' : ''}
                 </div>
-                <div class="text-slate-400 font-mono text-[11px] truncate" title="${path}">${path}</div>
+                <div class="text-slate-400 font-mono text-[11px] truncate" title="${escapeHtml(path)}">${escapeHtml(path)}</div>
                 <div class="flex items-center gap-3 text-slate-400 text-[11px] pt-0.5">
-                  <span>Group: <strong class="text-slate-300">${group}</strong></span>
+                  <span>Group: <strong class="text-slate-300">${escapeHtml(group)}</strong></span>
                   ${it.page_count ? `<span>Pages: <strong class="text-slate-300">${it.page_count}</strong></span>` : ''}
-                  ${it.volume_root ? `<span>Volume: <strong class="text-slate-300">${it.volume_root}</strong></span>` : ''}
+                  ${it.volume_root ? `<span>Volume: <strong class="text-slate-300">${escapeHtml(it.volume_root)}</strong></span>` : ''}
                 </div>
               </div>
 
-              <!-- Action Selector Buttons -->
+              <!-- Action Selector Buttons (Safe Numeric Index: Immune to quotes/apostrophes) -->
               <div class="flex items-center gap-1.5 shrink-0">
-                <button onclick="setItemAction('${path.replace(/\\/g, '\\\\')}', 'keep')"
+                <button onclick="setItemActionByIndex(${itemIdx}, 'keep')"
                         class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'keep' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
                   Keep
                 </button>
-                <button onclick="setItemAction('${path.replace(/\\/g, '\\\\')}', 'move_archive')"
+                <button onclick="setItemActionByIndex(${itemIdx}, 'move_archive')"
                         class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'move_archive' ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
                   Archive
                 </button>
-                <button onclick="setItemAction('${path.replace(/\\/g, '\\\\')}', 'delete')"
+                <button onclick="setItemActionByIndex(${itemIdx}, 'delete')"
                         class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'delete' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
                   Delete
                 </button>
@@ -1679,14 +1856,20 @@
         card.innerHTML = `
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
             <div>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded tracking-wider ${g.target_type === 'manga' ? 'bg-violet-900/60 text-violet-300 border border-violet-700' : 'bg-pink-900/60 text-pink-300 border border-pink-700'}">${g.target_type.toUpperCase()}</span>
-              <h3 class="text-base font-bold text-slate-100 inline-block ml-2">${g.title} <span class="text-slate-400 font-normal">(${g.sub_title})</span></h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded tracking-wider ${g.target_type === 'manga' ? 'bg-violet-900/60 text-violet-300 border border-violet-700' : 'bg-pink-900/60 text-pink-300 border border-pink-700'}">${escapeHtml(g.target_type.toUpperCase())}</span>
+              <h3 class="text-base font-bold text-slate-100 inline-block ml-2">${escapeHtml(g.title)} <span class="text-slate-400 font-normal">(${escapeHtml(g.sub_title)})</span></h3>
             </div>
-            <span class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">${g.category}</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">${escapeHtml(g.category)}</span>
+              <button onclick="keepGroupDuplicates(${gIdx})" title="Keep both copies for this group"
+                      class="px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${allKeptInGroup ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'}">
+                <span>🛡️ Keep Both</span>
+              </button>
+            </div>
           </div>
           <p class="text-xs text-slate-300 bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60 flex items-center gap-1.5">
             <span class="text-cyan-400 font-bold">ℹ️ Recommendation:</span>
-            <span>${g.recommendation}</span>
+            <span>${escapeHtml(g.recommendation)}</span>
           </p>
           <div class="space-y-2">${itemsHtml}</div>
         `;
@@ -1694,7 +1877,18 @@
       });
     }
 
+    function setItemActionByIndex(idx, action) {
+      const path = itemRegistry[idx];
+      if (path) {
+        setItemAction(path, action);
+      }
+    }
+
     function setItemAction(itemPath, action) {
+      selectedActions[itemPath] = action;
+      renderActiveView();
+      updateActionBadge();
+    }
       selectedActions[itemPath] = action;
       renderActiveView();
       updateActionBadge();
@@ -1800,7 +1994,7 @@
           statusBox.innerHTML = `<span class="text-emerald-400 font-bold">✓ Scan started!</span> Streaming live execution output below:`;
           setPollRate(750);
           await fetchLogs();
-          switchTab(target === 'doujinshi' ? 'doujinshi' : 'manga');
+          switchTab('report');
         } else {
           statusBox.innerHTML = `<span class="text-rose-400 font-bold">Error:</span> ${data.error || 'Failed to start scan'}`;
           if (btnStart) {
@@ -1843,13 +2037,8 @@
           await fetchState();
           await loadData();
           await loadReportsAndHistory();
-          if (data.manga_duplicates_count > 0 && data.doujinshi_duplicates_count === 0) {
-            switchTab('manga');
-          } else if (data.doujinshi_duplicates_count > 0 && data.manga_duplicates_count === 0) {
-            switchTab('doujinshi');
-          } else {
-            switchTab('manga');
-          }
+          reportSubFilter = 'all';
+          switchTab('report');
         } else {
           alert('Failed to load report: ' + (data.error || 'Unknown error'));
         }
@@ -2021,7 +2210,8 @@
         await fetchState();
         await loadData();
         await loadReportsAndHistory();
-        switchTab(data.type === 'manga' ? 'manga' : 'doujinshi');
+        reportSubFilter = data.type || 'all';
+        switchTab('report');
       } catch (e) {
         alert('Failed parsing tree: ' + e);
       }
@@ -2034,6 +2224,7 @@
     loadData();
     loadReportsAndHistory();
     loadScanJobs();
+    switchTab('report');
     setPollRate(3500);
   </script>
 </body>

@@ -67,17 +67,34 @@ def count_pages_in_archive(archive_path: Path) -> Tuple[int, int]:
     return count, total_size
 
 
-def scan_manga_directory(root_path: Path, progress_callback: Optional[Any] = None) -> List[ChapterItem]:
+def scan_manga_directory(
+    root_path: Path,
+    progress_callback: Optional[Any] = None,
+    excluded_manga: Optional[List[str]] = None
+) -> List[ChapterItem]:
     """
     Scans a manga directory structure.
     Adapts automatically to either:
     1. Multi-level: Root / Status_Bucket / Series / Chapter
     2. Standard: Root / Series / Chapter
+    Skips any manga series matching items in excluded_manga.
     """
     results: List[ChapterItem] = []
     if not root_path.exists():
         _report_progress(progress_callback, f"Directory does not exist: {root_path}", "WARN")
         return results
+
+    # Normalize exclusion set (lowercase, stripped)
+    excluded_set = {ex.strip().lower() for ex in (excluded_manga or []) if ex.strip()}
+    if excluded_set:
+        _report_progress(progress_callback, f"Exclusion filter active: {len(excluded_set)} Manga titles will be skipped.", "INFO")
+
+    def _is_excluded(name: str) -> bool:
+        if not excluded_set:
+            return False
+        clean = clean_series_name(name).lower()
+        n_lower = name.lower()
+        return any(ex in n_lower or ex == clean for ex in excluded_set)
 
     _report_progress(progress_callback, f"Scanning Manga directory: '{root_path.name}' ({root_path})", "INFO")
 
@@ -105,6 +122,10 @@ def scan_manga_directory(root_path: Path, progress_callback: Optional[Any] = Non
                     if not series_dir.is_dir():
                         continue
                     series_name = series_dir.name
+                    if _is_excluded(series_name):
+                        _report_progress(progress_callback, f"Skipping excluded Manga: '{series_name}'", "SCAN")
+                        continue
+
                     series_scanned_count += 1
                     series_added = 0
                     for item in series_dir.iterdir():
@@ -131,6 +152,10 @@ def scan_manga_directory(root_path: Path, progress_callback: Optional[Any] = Non
             else:
                 # Standard hierarchy: root_path / series_name / chapter
                 series_name = entry.name
+                if _is_excluded(series_name):
+                    _report_progress(progress_callback, f"Skipping excluded Manga: '{series_name}'", "SCAN")
+                    continue
+
                 series_scanned_count += 1
                 series_added = 0
                 for item in entry.iterdir():

@@ -67,10 +67,17 @@ def detect_manga_duplicates(chapters: List[ChapterItem]) -> List[DuplicateGroup]
     return duplicate_groups
 
 
-def detect_manga_partials(chapters: List[ChapterItem], min_page_ratio: float = 0.60) -> List[PartialIssue]:
+def detect_manga_partials(
+    chapters: List[ChapterItem],
+    min_page_ratio: float = 0.60,
+    check_mode: str = "name"
+) -> List[PartialIssue]:
     """
     Identifies partial or fragmented chapters within each manga:
     1. Fractional sub-chapters (e.g. 10.1, 10.2) coexisting with full chapter (10.0).
+       Note: Chapters ending in .5 (e.g. 1.5, 2.5, 12.5) are typically volume specials/omake,
+       not real partial split chapters. When check_mode == "name", they are excluded from
+       fractional overlap issues. In check_mode == "image", they are verified visually.
     2. Chapters flagged with incomplete/sample keywords.
     3. Chapters with suspiciously low page counts compared to peer releases.
     """
@@ -107,14 +114,43 @@ def detect_manga_partials(chapters: List[ChapterItem], min_page_ratio: float = 0
         for dec in decimals_present:
             parent_int = int(dec)
             if parent_int in integers_present:
+                # Chapters ending in .5 are usually volume specials/omake, not partial split chapters.
+                fractional_part = round(dec % 1.0, 4)
+                is_half_chapter = (fractional_part == 0.5)
+
                 full_chapters = num_to_ch.get(float(parent_int), [])
                 fractional_chapters = num_to_ch.get(dec, [])
+
+                if is_half_chapter:
+                    if check_mode != "image":
+                        # In name-based checking mode, skip .5 volume specials
+                        continue
+                    else:
+                        # In visual mode, verify artwork similarity
+                        is_visual_duplicate = False
+                        if full_chapters and fractional_chapters:
+                            pa = full_chapters[0].file_path
+                            pb = fractional_chapters[0].file_path
+                            if pa and pb and os.path.exists(pa) and os.path.exists(pb):
+                                try:
+                                    from src.image_hasher import verify_chapter_similarity
+                                    match, dist, expl = verify_chapter_similarity(pa, pb)
+                                    if match:
+                                        is_visual_duplicate = True
+                                except Exception:
+                                    pass
+                        if not is_visual_duplicate:
+                            continue
+
                 issues.append(
                     PartialIssue(
                         issue_id=f"part_{uuid.uuid4().hex[:8]}",
                         series_name=series_display,
                         issue_type="fractional_overlap",
-                        description=f"Sub-chapter {dec:g} coexists with consolidated Chapter {parent_int}.",
+                        description=(
+                            f"Sub-chapter {dec:g} coexists with consolidated Chapter {parent_int}."
+                            + (" [Visual Verification: Confirmed duplicate artwork]" if is_half_chapter else "")
+                        ),
                         affected_items=[c.to_dict() for c in (full_chapters + fractional_chapters)]
                     )
                 )

@@ -23,6 +23,7 @@ class ScanJobCreatePayload(BaseModel):
     paths: List[str] = Field(..., min_items=1, description="One or more target directory paths to scan")
     mode: str = Field("name", description="'name' or 'image'")
     description: Optional[str] = ""
+    excluded_manga: Optional[List[str]] = Field(default_factory=list, description="Manga series names/titles to exclude from scan")
 
 
 class ScanJobUpdatePayload(BaseModel):
@@ -31,6 +32,7 @@ class ScanJobUpdatePayload(BaseModel):
     paths: Optional[List[str]] = None
     mode: Optional[str] = None
     description: Optional[str] = None
+    excluded_manga: Optional[List[str]] = None
 
 
 class ScanJobManager:
@@ -64,6 +66,7 @@ class ScanJobManager:
                 "paths": manga_defaults,
                 "mode": "name",
                 "description": "Standard intra-series scan across primary Manga & Manhwa directories",
+                "excluded_manga": [],
                 "created_at": now,
                 "last_run": None,
                 "last_status": "never_run",
@@ -77,6 +80,7 @@ class ScanJobManager:
                 "paths": doujin_defaults,
                 "mode": "name",
                 "description": "Standard cross-directory deduplication across primary Doujinshi collections",
+                "excluded_manga": [],
                 "created_at": now,
                 "last_run": None,
                 "last_status": "never_run",
@@ -128,6 +132,8 @@ class ScanJobManager:
         job_slug = re.sub(r"[^a-zA-Z0-9]+", "_", payload.name.strip().lower()).strip("_")
         unique_id = f"job_{job_slug}_{uuid.uuid4().hex[:6]}"
 
+        clean_exclusions = [ex.strip() for ex in (payload.excluded_manga or []) if ex.strip()]
+
         new_job = {
             "id": unique_id,
             "name": payload.name.strip(),
@@ -135,6 +141,7 @@ class ScanJobManager:
             "paths": clean_paths,
             "mode": payload.mode.strip().lower(),
             "description": payload.description.strip() if payload.description else "",
+            "excluded_manga": clean_exclusions,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "last_run": None,
             "last_status": "never_run",
@@ -170,6 +177,8 @@ class ScanJobManager:
             target_job["mode"] = payload.mode.strip().lower()
         if payload.description is not None:
             target_job["description"] = payload.description.strip()
+        if payload.excluded_manga is not None:
+            target_job["excluded_manga"] = [ex.strip() for ex in payload.excluded_manga if ex.strip()]
 
         self._save_all(jobs)
         return target_job
