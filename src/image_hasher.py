@@ -142,23 +142,139 @@ def compute_hamming_distance(hash1_str: str, hash2_str: str) -> Optional[int]:
         return None
 
 
-def verify_chapter_similarity(path_a: str, path_b: str, threshold: int = 6) -> Tuple[bool, int, str]:
+def count_images(item_path: str) -> int:
+    """How many page images a chapter folder or archive contains."""
+    p = Path(item_path)
+    if not p.exists():
+        return 0
+    if p.is_file() and p.suffix.lower() in {".cbz", ".zip"}:
+        return len(get_images_in_archive(p))
+    if p.is_dir():
+        imgs = get_images_in_folder(p)
+        if imgs:
+            return len(imgs)
+        try:
+            for child in p.iterdir():
+                if child.is_dir():
+                    sub = get_images_in_folder(child)
+                    if sub:
+                        return len(sub)
+        except (PermissionError, OSError):
+            return 0
+    return 0
+
+
+def sample_page_indices(page_count: int) -> List[int]:
     """
-    Compares Page 1 (cover) and Mid-Page of two chapters to definitively verify identical artwork.
+    Pages used to decide whether two releases are the same chapter.
+    The first file is often a credits or title card that differs by scanlator,
+    so once a chapter has a few pages we compare the next page, the middle, and the last.
+    """
+    if page_count <= 0:
+        return []
+    if page_count == 1:
+        return [0]
+    if page_count == 2:
+        return [0, 1]
+    first = 1 if page_count >= 4 else 0
+    return sorted({first, page_count // 2, page_count - 1})
+
+
+def verify_chapter_similarity(path_a: str, path_b: str, threshold: int = 12) -> Tuple[bool, int, str]:
+    """
+    Compare story pages of two chapters.
+    Distance <= threshold (default 12) is the same artwork, including rescans.
+    A credits page is ignored when other pages exist, so a different title card
+    does not hide a matching chapter.
     Returns: (is_duplicate, hamming_distance, explanation)
     """
     if not HAS_IMAGE_DEPS:
         return False, 999, "imagehash/Pillow libraries not installed"
 
-    hash_a_cov = compute_perceptual_hash(path_a, 0)
-    hash_b_cov = compute_perceptual_hash(path_b, 0)
+    samples_a = sample_page_indices(count_images(path_a))
+    samples_b = sample_page_indices(count_images(path_b))
+    if not samples_a or not samples_b:
+        return False, 999, "Could not extract page images for visual comparison"
 
-    if not hash_a_cov or not hash_b_cov:
-        return False, 999, "Could not extract cover images for visual comparison"
+    judged: List[Tuple[int, int]] = []
+    for index_a, index_b in zip(samples_a, samples_b):
+        hash_a = compute_perceptual_hash(path_a, index_a)
+        hash_b = compute_perceptual_hash(path_b, index_b)
+        if not hash_a or not hash_b:
+            continue
+        dist = compute_hamming_distance(hash_a, hash_b)
+        if dist is None:
+            continue
+        judged.append((index_a, dist))
 
-    dist_cov = compute_hamming_distance(hash_a_cov, hash_b_cov) or 999
+    if not judged:
+        return False, 999, "Could not extract page images for visual comparison"
 
-    if dist_cov <= threshold:
-        return True, dist_cov, f"Visual match verified (Hamming distance: {dist_cov})"
-    else:
-        return False, dist_cov, f"Visual mismatch (Hamming distance: {dist_cov} > {threshold})"
+    story = [dist for index, dist in judged if index != 0] or [dist for _, dist in judged]
+    story_sorted = sorted(story)
+    median = story_sorted[len(story_sorted) // 2]
+    is_match = median <= threshold
+    if is_match:
+        return True, median, f"Visual match verified (Hamming distance: {median})"
+    return False, median, f"Visual mismatch (Hamming distance: {median} > {threshold})"
+
+
+def cluster_visually_matching_items(items: List[dict], threshold: int = 12) -> Tuple[List[Tuple[List[dict], int, str]], str]:
+    """
+    Split a name-matched group into clusters that share artwork.
+    Status is "matched", "different", or "unreadable".
+    """
+    usable = [it for it in items if it.get("file_path")]
+    if len(usable) < 2:
+        return [], "unreadable"
+
+    parent = list(range(len(usable)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    pair_distance: Dict[Tuple[int, int], int] = {}
+    compared = 0
+    unreadable = 0
+    for i in range(len(usable)):
+        for j in range(i + 1, len(usable)):
+            match, dist, expl = verify_chapter_similarity(
+                usable[i]["file_path"], usable[j]["file_path"], threshold
+            )
+            compared += 1
+            if "Could not extract" in expl or "not installed" in expl:
+                unreadable += 1
+                continue
+            if match:
+                parent[find(i)] = find(j)
+                pair_distance[(i, j)] = dist
+
+    buckets: Dict[int, List[int]] = {}
+    for i in range(len(usable)):
+        buckets.setdefault(find(i), []).append(i)
+
+    clusters: List[Tuple[List[dict], int, str]] = []
+    for indexes in buckets.values():
+        if len(indexes) < 2:
+            continue
+        distances = [
+            pair_distance[(a, b)]
+            for a in indexes
+            for b in indexes
+            if a < b and (a, b) in pair_distance
+        ]
+        dist = min(distances) if distances else 0
+        clusters.append((
+            [usable[i] for i in indexes],
+            dist,
+            f"Visual match verified (Hamming distance: {dist})",
+        ))
+
+    if clusters:
+        return clusters, "matched"
+    if compared > 0 and unreadable == compared:
+        return [], "unreadable"
+    return [], "different"

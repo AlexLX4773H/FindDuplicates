@@ -15,11 +15,9 @@ from pathlib import Path
 
 from src.config import load_config, normalize_path
 from src.scanner import scan_manga_directory, scan_doujinshi_directory
-from src.detector import detect_manga_duplicates, detect_manga_partials, detect_doujinshi_duplicates
+from src.detector import detect_manga_duplicates, detect_manga_partials, detect_doujinshi_duplicates, retain_visual_matches
 from src.parser import parse_tree_dump_lines
 from src.reporter import export_terminal, export_json, export_csv, export_html
-from src.image_hasher import verify_chapter_similarity, compute_perceptual_hash, compute_hamming_distance
-
 
 def run_manga_job(args, cfg):
     output_dir = Path(args.output or cfg.get("output", {}).get("report_directory", "./reports")).resolve()
@@ -46,14 +44,11 @@ def run_manga_job(args, cfg):
 
     if args.by == "image":
         print("[*] Running image perceptual hash verification on duplicate chapter candidates...")
-        for g in duplicates:
-            if len(g.items) >= 2:
-                p_a = g.items[0].get("file_path", "")
-                p_b = g.items[1].get("file_path", "")
-                if p_a and p_b:
-                    match, dist, expl = verify_chapter_similarity(p_a, p_b)
-                    g.hamming_distance = dist
-                    g.recommendation += f" [Visual Verification: {expl}]"
+        duplicates = retain_visual_matches(
+            duplicates,
+            threshold=12,
+            progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+        )
 
     # Export reports
     export_terminal(duplicates, partials, len(chapters))
@@ -88,24 +83,12 @@ def run_doujinshi_job(args, cfg):
     duplicates = detect_doujinshi_duplicates(works)
 
     if args.by == "image":
-        print("[*] Indexing cover perceptual hashes for visual clustering...")
-        # Optional image perceptual hash matching for doujinshi
-        hashes = {}
-        for w in works:
-            if w.file_path:
-                h = compute_perceptual_hash(w.file_path, 0)
-                if h:
-                    hashes[w.file_path] = (h, w)
-        # Verify flagged duplicates
-        for g in duplicates:
-            if len(g.items) >= 2:
-                pa = g.items[0].get("file_path", "")
-                pb = g.items[1].get("file_path", "")
-                if pa in hashes and pb in hashes:
-                    dist = compute_hamming_distance(hashes[pa][0], hashes[pb][0])
-                    g.hamming_distance = dist
-                    if dist is not None:
-                        g.recommendation += f" [Cover Hamming Distance: {dist}]"
+        print("[*] Checking doujinshi name matches against page artwork...")
+        duplicates = retain_visual_matches(
+            duplicates,
+            threshold=12,
+            progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+        )
 
     export_terminal(duplicates, [], len(works))
     export_json(duplicates, [], str(output_dir / "doujinshi_duplicates.json"))

@@ -68,6 +68,62 @@ def detect_manga_duplicates(chapters: List[ChapterItem]) -> List[DuplicateGroup]
     return duplicate_groups
 
 
+def retain_visual_matches(groups: List[DuplicateGroup], threshold: int = 12, progress_callback=None) -> List[DuplicateGroup]:
+    """
+    Image scans start from the name detector, then keep only releases whose
+    story pages are the same artwork. Name collisions with different pages
+    are left out of the visual report.
+    """
+    from src.image_hasher import cluster_visually_matching_items
+
+    def log(message: str, level: str = "HASH") -> None:
+        if progress_callback:
+            progress_callback(message, level)
+
+    kept: List[DuplicateGroup] = []
+    different = 0
+    unreadable = 0
+    log(f"Visually checking {len(groups)} name-matched groups (story pages, Hamming <= {threshold})...", "HASH")
+
+    for group in groups:
+        clusters, status = cluster_visually_matching_items(group.items, threshold)
+        label = f"{group.title} {group.sub_title}".strip()
+        if status == "unreadable":
+            unreadable += 1
+            log(f"Could not read page images for '{label}'. Left out of the visual report.", "WARN")
+            continue
+        if status != "matched" or not clusters:
+            different += 1
+            log(f"Artwork differs for '{label}'. Name match only, not a visual duplicate.", "WARN")
+            continue
+
+        for items, dist, expl in clusters:
+            keeper = group.recommended_keep_path
+            if not any((it.get("file_path") or it.get("raw_name")) == keeper for it in items):
+                keeper = max(items, key=lambda it: (it.get("page_count") or 0, it.get("file_size_bytes") or 0)).get("file_path") or items[0].get("raw_name", "")
+            base = group.recommendation.split(" [Visual Verification:")[0].strip()
+            kept.append(
+                DuplicateGroup(
+                    group_id=f"visual_{uuid.uuid4().hex[:8]}",
+                    target_type=group.target_type,
+                    title=group.title,
+                    sub_title=group.sub_title,
+                    category=group.category,
+                    items=items,
+                    recommendation=f"{base} [Visual Verification: {expl}]",
+                    recommended_keep_path=keeper,
+                    hamming_distance=dist,
+                )
+            )
+            log(f"Visual match in '{label}': {len(items)} releases, Hamming {dist}.", "SUCCESS")
+
+    log(
+        f"Visual report: {len(kept)} matching groups. Dropped {different} name-only groups and {unreadable} groups with unreadable images.",
+        "SUCCESS" if kept else "WARN",
+    )
+    return kept
+
+
 def detect_manga_partials(
     chapters: List[ChapterItem],
     min_page_ratio: float = 0.60,

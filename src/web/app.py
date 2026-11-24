@@ -16,11 +16,10 @@ from pydantic import BaseModel
 
 from src.config import load_config, normalize_path
 from src.scanner import scan_manga_directory, scan_doujinshi_directory
-from src.detector import detect_manga_duplicates, detect_manga_partials, detect_doujinshi_duplicates
+from src.detector import detect_manga_duplicates, detect_manga_partials, detect_doujinshi_duplicates, retain_visual_matches
 from src.parser import parse_tree_dump_lines
 from src.actions import ActionExecutor
 from src.reporter import export_json, export_csv, export_html
-from src.image_hasher import verify_chapter_similarity, compute_perceptual_hash, compute_hamming_distance
 from src.models import DuplicateGroup, PartialIssue
 from src.web.jobs import job_manager, ScanJobCreatePayload, ScanJobUpdatePayload
 
@@ -827,17 +826,11 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             add_scan_log(f"Detected {len(dupes)} duplicate groups and {len(parts)} partial chapter issues.", "SUCCESS" if len(dupes) > 0 else "INFO")
 
             if mode == "image":
-                add_scan_log(f"Starting visual perceptual hash (dHash/pHash) verification on {len(dupes)} candidate groups...", "HASH")
-                for idx, g in enumerate(dupes, 1):
-                    if len(g.items) >= 2:
-                        pa = g.items[0].get("file_path", "")
-                        pb = g.items[1].get("file_path", "")
-                        if pa and pb:
-                            add_scan_log(f"Comparing artwork for '{g.title}' {g.sub_title}...", "HASH")
-                            match, dist, expl = verify_chapter_similarity(pa, pb)
-                            g.hamming_distance = dist
-                            g.recommendation += f" [Visual Verification: {expl}]"
-                            add_scan_log(f"Result: Hamming distance {dist} ({expl})", "SUCCESS" if match else "WARN")
+                dupes = retain_visual_matches(
+                    dupes,
+                    threshold=12,
+                    progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+                )
 
             STATE["manga_duplicates"] = dupes
             STATE["manga_partials"] = parts
@@ -863,26 +856,11 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             add_scan_log(f"Detected {len(dupes)} doujinshi duplicate groups across library.", "SUCCESS" if len(dupes) > 0 else "INFO")
 
             if mode == "image":
-                add_scan_log(f"Extracting cover perceptual hashes across {len(works)} doujinshi works...", "HASH")
-                hashes = {}
-                for idx, w in enumerate(works, 1):
-                    if w.file_path:
-                        h = compute_perceptual_hash(w.file_path, 0)
-                        if h:
-                            hashes[w.file_path] = h
-                        if idx % 50 == 0 or idx == len(works):
-                            add_scan_log(f"Cover hash progress: {idx}/{len(works)} processed...", "HASH")
-
-                for g in dupes:
-                    if len(g.items) >= 2:
-                        pa = g.items[0].get("file_path", "")
-                        pb = g.items[1].get("file_path", "")
-                        if pa in hashes and pb in hashes:
-                            dist = compute_hamming_distance(hashes[pa], hashes[pb])
-                            g.hamming_distance = dist
-                            if dist is not None:
-                                g.recommendation += f" [Cover Distance: {dist}]"
-                                add_scan_log(f"Cover Hamming distance for '{g.title}': {dist}", "HASH")
+                dupes = retain_visual_matches(
+                    dupes,
+                    threshold=12,
+                    progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+                )
 
             STATE["doujinshi_duplicates"] = dupes
             if target == "doujinshi":
