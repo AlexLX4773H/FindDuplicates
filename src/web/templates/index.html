@@ -4,798 +4,783 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FindDuplicates Interactive Dashboard & Resolution Window</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    .glass { background: rgba(15, 23, 42, 0.78); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
-    .glass-card { background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); }
+    :root {
+      --bg-canvas: #050505;
+      --bg-sidebar: #0A0A0C;
+      --bg-surface: #0E0E11;
+      --bg-surface-elevated: #141418;
+      --bg-surface-subtle: #1A1A20;
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-default: rgba(255, 255, 255, 0.12);
+      --border-gold-subtle: rgba(212, 175, 55, 0.24);
+      --border-gold-strong: rgba(212, 175, 55, 0.55);
+      --gold-primary: #D4AF37;
+      --gold-bright: #EED278;
+      --gold-muted: #9E8028;
+      --gold-tint: rgba(212, 175, 55, 0.10);
+      --gold-glow: rgba(212, 175, 55, 0.18);
+      --text-primary: #F4F4F6;
+      --text-secondary: #A1A1AA;
+      --text-muted: #666670;
+      --text-on-gold: #090805;
+      --status-keep: #34D399;
+      --status-keep-bg: rgba(52, 211, 153, 0.10);
+      --status-keep-border: rgba(52, 211, 153, 0.35);
+      --status-archive: #E5A93C;
+      --status-archive-bg: rgba(229, 169, 60, 0.12);
+      --status-archive-border: rgba(229, 169, 60, 0.40);
+      --status-delete: #F87171;
+      --status-delete-bg: rgba(248, 113, 113, 0.10);
+      --status-delete-border: rgba(248, 113, 113, 0.38);
+      --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sidebar-w: 252px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg-canvas); color: var(--text-primary); font-family: var(--font-sans); font-size: 14px; line-height: 1.45; }
+    body::before {
+      content: ''; position: fixed; top: -180px; left: 50%; transform: translateX(-35%);
+      width: 900px; height: 320px; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse at center, rgba(212, 175, 55, 0.065) 0%, rgba(5, 5, 5, 0) 70%);
+    }
+    button, input, select, textarea { font-family: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+    .opacity-40 { opacity: 0.4; }
+    .pointer-events-none { pointer-events: none; }
+    .mono, .font-mono { font-family: var(--font-mono); }
+    .muted { color: var(--text-muted); }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tabular { font-variant-numeric: tabular-nums; }
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
-    @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 3px; }
+    @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
     .scanning-pulse { animation: pulse-slow 1.5s infinite; }
+    .app-shell { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0; background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column;
+      padding: 18px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    }
+    .sidebar-backdrop { display: none; }
+    .brand { display: flex; align-items: flex-start; gap: 11px; padding: 4px 8px 16px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 14px; }
+    .brand-copy { min-width: 0; }
+    #statusMessage { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .brand-mark {
+      width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; display: grid; place-items: center;
+      color: var(--gold-bright); border: 1px solid var(--border-gold-subtle);
+      background: linear-gradient(145deg, rgba(212,175,55,0.22), rgba(212,175,55,0.04));
+    }
+    .brand h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+    .brand-status { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+    .status-dot, .nav-log-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--status-keep); flex-shrink: 0; display: inline-block; }
+    .status-dot.dot-live, .nav-log-dot.dot-live { background: var(--gold-bright); }
+    .status-dot.dot-idle, .nav-log-dot.dot-idle { background: var(--status-keep); }
+    #statusMessage { margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.35; }
+    .scan-split { display: flex; gap: 6px; margin: 14px 0 18px; }
+    .btn-quick-scan, .btn-custom-scan {
+      height: 36px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .btn-quick-scan {
+      flex: 1; padding: 0 12px; background: var(--gold-tint); border: 1px solid var(--border-gold-subtle);
+      color: var(--gold-bright); font-size: 12.5px; font-weight: 600;
+    }
+    .btn-quick-scan:hover { border-color: var(--border-gold-strong); box-shadow: 0 0 16px rgba(212,175,55,0.14); }
+    .btn-custom-scan { width: 36px; background: var(--bg-surface); border: 1px solid var(--border-subtle); color: var(--text-secondary); }
+    .btn-custom-scan:hover { background: var(--bg-surface-elevated); color: var(--text-primary); }
+    .nav-section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 0 10px 8px; }
+    .nav-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 18px; }
+    .nav-item {
+      display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left;
+      padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: transparent;
+      color: var(--text-secondary); font-size: 13px; font-weight: 500; position: relative;
+    }
+    .nav-item-left { display: flex; align-items: center; gap: 9px; }
+    .nav-item svg { flex-shrink: 0; }
+    .nav-item:hover { background: var(--bg-surface-elevated); color: var(--text-primary); }
+    .nav-item.is-active { background: var(--gold-tint); border-color: var(--border-gold-subtle); color: var(--text-primary); }
+    .nav-item.is-active::before {
+      content: ''; position: absolute; left: -1px; top: 7px; bottom: 7px; width: 2.5px; border-radius: 2px; background: var(--gold-primary);
+    }
+    .nav-item.is-active svg { color: var(--gold-bright); }
+    .nav-count {
+      font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums;
+      padding: 1px 6px; border-radius: 5px; background: var(--bg-surface-subtle); color: var(--text-secondary);
+    }
+    .nav-item.is-active .nav-count { background: rgba(212,175,55,0.20); color: var(--gold-bright); }
+    .telemetry-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 12px 8px; margin-bottom: 8px; }
+    .telemetry-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 0 6px 8px; font-weight: 600; }
+    .telemetry-grid { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
+    .telemetry-cell { position: relative; padding: 2px 4px; }
+    .telemetry-cell:not(:last-child)::after { content: ''; position: absolute; right: 0; top: 4px; bottom: 4px; width: 1px; background: var(--border-subtle); }
+    .telemetry-val { display: block; font-family: var(--font-mono); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .telemetry-val.gold { color: var(--gold-bright); }
+    .telemetry-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .sidebar-footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 4px; }
+    .util-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; background: transparent; border: 0; color: var(--text-secondary); padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+    .util-btn:hover, .util-btn.is-live { background: var(--bg-surface-elevated); color: var(--text-primary); }
+    .util-left { display: flex; align-items: center; gap: 8px; }
+    .safe-wrap { position: relative; margin-top: 8px; }
+    .safe-pill {
+      width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+      background: transparent; border: 1px solid var(--border-gold-subtle); color: var(--gold-bright); font-size: 12px; font-weight: 600;
+    }
+    .safe-popover {
+      display: none; position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 5;
+      background: var(--bg-surface-elevated); border: 1px solid var(--border-gold-subtle); border-radius: 10px;
+      padding: 10px 12px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; font-weight: 400;
+    }
+    .safe-wrap:hover .safe-popover, .safe-wrap:focus-within .safe-popover { display: block; }
+    .main-column { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar {
+      position: sticky; top: 0; z-index: 30; height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 0 18px; background: rgba(5,5,5,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-subtle);
+    }
+    .topbar-left, .topbar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .icon-btn {
+      width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border-subtle); background: transparent;
+      color: var(--text-secondary); display: none; place-items: center;
+    }
+    .icon-btn:hover { color: var(--text-primary); background: var(--bg-surface-elevated); }
+    .view-label { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+    .view-label strong { color: var(--text-secondary); font-weight: 600; }
+    .report-pill {
+      display: flex; align-items: center; gap: 8px; max-width: min(420px, 42vw); padding: 4px 10px; border-radius: 8px;
+      background: var(--bg-surface); border: 1px solid var(--border-subtle);
+    }
+    .report-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold-primary); flex-shrink: 0; }
+    #activeReportNameBadge { font-family: var(--font-mono); font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .export-wrap { position: relative; }
+    .export-menu {
+      position: absolute; top: calc(100% + 6px); left: 0; min-width: 180px; z-index: 40;
+      background: var(--bg-surface-elevated); border: 1px solid var(--border-default); border-radius: 10px; padding: 6px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+    }
+    .export-menu a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--text-primary); text-decoration: none; font-size: 12.5px; }
+    .export-menu a:hover { background: var(--gold-tint); }
+    .btn, .btn-ghost, .btn-gold, .btn-danger {
+      border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary);
+      padding: 7px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:hover, .btn-ghost:hover { background: var(--bg-surface-elevated); }
+    .btn-ghost { background: transparent; color: var(--text-secondary); }
+    .btn-ghost.is-on { color: var(--gold-bright); border-color: var(--border-gold-subtle); }
+    .btn-discard { color: var(--text-muted); }
+    .btn-discard:hover { color: var(--status-delete); border-color: var(--status-delete-border); background: var(--status-delete-bg); }
+    .btn-gold {
+      background: linear-gradient(135deg, #E5C158 0%, #C59B27 100%); color: var(--text-on-gold); border-color: transparent;
+      box-shadow: 0 0 24px rgba(212,175,55,0.16); font-weight: 700;
+    }
+    .btn-gold:hover { filter: brightness(1.06); }
+    .btn-gold.is-idle { opacity: 0.55; box-shadow: none; }
+    .btn-gold .count-pill, #actionBadge {
+      background: rgba(9,8,5,0.22); color: var(--text-on-gold); border-radius: 999px; padding: 0 6px; font-size: 10px;
+      font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    }
+    .btn-danger { background: var(--status-delete-bg); color: var(--status-delete); border-color: var(--status-delete-border); }
+    .btn-danger:disabled, #btnExecutePlan:disabled { opacity: 0.5; cursor: not-allowed; }
+    #btnExecutePlan.is-ready { opacity: 1; cursor: pointer; background: #b91c1c; color: white; border-color: transparent; }
+    .btn-sm { padding: 6px 8px; font-size: 11px; }
+    .btn-danger-ghost { color: var(--status-delete); border-color: var(--status-delete-border); background: transparent; }
+    .btn-danger-ghost:hover { background: var(--status-delete-bg); }
+    .btn-keep { color: var(--status-keep); border-color: var(--status-keep-border); background: transparent; }
+    .btn-keep:hover, .btn-keep.is-on { background: var(--status-keep-bg); }
+    .btn-gold-ghost { color: var(--gold-bright); border-color: var(--border-gold-subtle); background: transparent; }
+    .btn-gold-ghost:hover { background: var(--gold-tint); }
+    .workspace { width: min(1140px, 100%); margin: 0 auto; padding: 28px 22px 48px; }
+    .panel { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .panel-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 14px; margin-bottom: 16px; }
+    .panel h2, .panel h3 { margin: 0; }
+    .panel h2 { font-size: 16px; }
+    .panel p.lead { margin: 4px 0 0; color: var(--text-secondary); font-size: 12.5px; }
+    .section-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); font-weight: 700; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .sample-card, .report-card, .job-card {
+      background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px;
+      display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
+    }
+    .report-card.is-active, .job-card:hover, .sample-card:hover { border-color: var(--border-gold-subtle); }
+    .kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold-muted); }
+    .kicker.is-active { color: var(--gold-bright); }
+    .report-filename, .job-card h4 { margin: 4px 0 0; font-size: 13px; font-family: var(--font-mono); word-break: break-all; }
+    .job-card h4 { font-family: var(--font-sans); font-size: 14px; font-weight: 700; }
+    .job-origin, .chip-row, .inline-actions, .history-row, .console-head, .filter-bar, .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 600;
+      letter-spacing: 0.04em; text-transform: uppercase; background: var(--bg-surface-subtle); color: var(--text-secondary); border: 1px solid var(--border-subtle);
+    }
+    .chip-gold { background: var(--gold-tint); color: var(--gold-bright); border-color: var(--border-gold-subtle); }
+    .chip-rose { color: #f9a8d4; border-color: rgba(244,114,182,0.35); background: rgba(244,114,182,0.08); text-transform: none; letter-spacing: 0; font-size: 11px; }
+    .chip-archive { color: var(--status-archive); border-color: var(--status-archive-border); background: var(--status-archive-bg); text-transform: none; letter-spacing: 0; }
+    .chip-keep { color: var(--status-keep); border-color: var(--status-keep-border); background: var(--status-keep-bg); text-transform: none; }
+    .report-card-actions, .path-list { display: flex; flex-direction: column; gap: 6px; }
+    .report-card-actions { flex-direction: row; flex-wrap: wrap; border-top: 1px solid var(--border-subtle); padding-top: 10px; }
+    .path-line { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 4px 8px; }
+    .history-row { justify-content: space-between; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+    .history-main { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--gold-bright); flex-shrink: 0; }
+    .dot.is-done { background: var(--status-keep); }
+    .console-panel { border-color: var(--border-gold-subtle); }
+    .console-head { justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; }
+    .console-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; border: 1px solid var(--border-subtle); }
+    .console-badge.badge-live { color: var(--gold-bright); border-color: var(--border-gold-subtle); background: var(--gold-tint); }
+    .console-badge.badge-idle { color: var(--status-keep); border-color: var(--status-keep-border); background: var(--status-keep-bg); }
+    #consoleSubProgress { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; font-family: var(--font-mono); }
+    #consoleLogOutput, #modalScanTerminal, #composeCodeBlock, #executionResultBox, #impactedFilesList {
+      background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 12px;
+      font-family: var(--font-mono); font-size: 12px; max-height: 256px; overflow: auto; color: var(--text-secondary);
+    }
+    #consoleProgressBar { height: 6px; background: var(--bg-canvas); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+    #consoleProgressBar .bar { height: 100%; width: 100%; background: linear-gradient(90deg, var(--gold-muted), var(--gold-bright)); }
+    .log-row { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; }
+    .log-time { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; flex-shrink: 0; }
+    .log-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; border: 1px solid var(--border-subtle); border-radius: 4px; padding: 0 5px; flex-shrink: 0; }
+    .log-badge-INFO { color: #93c5fd; }
+    .log-badge-SCAN, .log-badge-HASH { color: var(--gold-bright); }
+    .log-badge-WARN { color: var(--status-archive); }
+    .log-badge-ERROR { color: var(--status-delete); }
+    .log-badge-SUCCESS { color: var(--status-keep); }
+    .log-msg { color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; word-break: break-word; }
+    .filter-bar { justify-content: space-between; margin-bottom: 20px; gap: 12px; }
+    .filter-tabs, .filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .filter-tab {
+      background: transparent; border: 1px solid transparent; color: var(--text-secondary); border-radius: 8px; padding: 7px 10px;
+      font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .filter-tab:hover { background: var(--bg-surface-elevated); }
+    .filter-tab.is-active { background: var(--gold-tint); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--gold-primary); }
+    .filter-tab .nav-count { background: var(--bg-canvas); }
+    .search-wrap { position: relative; }
+    .search-wrap svg { position: absolute; left: 8px; top: 8px; color: var(--text-muted); }
+    #searchInput, .field, textarea.field, select.field {
+      background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 10px; font-size: 12px; width: 100%;
+    }
+    #searchInput { width: 220px; padding-left: 28px; }
+    #searchInput:focus, .field:focus, textarea.field:focus, select.field:focus { outline: none; border-color: var(--border-gold-strong); }
+    .stack { display: flex; flex-direction: column; gap: 14px; }
+    .form-grid, .choice-grid, .count-grid { display: grid; gap: 12px; }
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    .choice-grid.cols-3, .count-grid { grid-template-columns: repeat(3, 1fr); }
+    .choice-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+    .field-label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; color: var(--text-secondary); }
+    .hint { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; }
+    .choice {
+      display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle);
+      background: var(--bg-canvas); cursor: pointer;
+    }
+    .choice:hover { border-color: var(--border-gold-subtle); }
+    .choice strong { display: block; font-size: 12px; }
+    .choice span { font-size: 11px; color: var(--text-muted); }
+    .linkish { background: none; border: 0; color: var(--gold-bright); font-size: 11px; padding: 0; }
+    .form-actions { justify-content: flex-end; border-top: 1px solid var(--border-subtle); padding-top: 12px; }
+    .empty-state { text-align: center; color: var(--text-muted); padding: 36px 16px; border: 1px dashed var(--border-subtle); border-radius: 12px; }
+    .group-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+    .group-head, .recommend, .candidate-row { padding: 14px 20px; }
+    .group-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; }
+    .group-title { margin: 6px 0 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .group-title .chapter { color: var(--text-secondary); font-weight: 500; }
+    .group-head-right { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+    .recommend { background: rgba(212,175,55,0.04); border-bottom: 1px solid var(--border-subtle); box-shadow: inset 2px 0 0 var(--gold-primary); color: #C8C8D0; font-size: 12.5px; line-height: 1.5; display: flex; gap: 8px; }
+    .candidate-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; border-top: 1px solid var(--border-subtle); border-left: 3px solid var(--border-subtle); background: var(--bg-surface); }
+    .candidate-row:hover { background: rgba(255,255,255,0.02); }
+    .candidate-row.action-keep { border-left-color: var(--status-keep); }
+    .candidate-row.action-archive { border-left-color: var(--status-archive); }
+    .candidate-row.action-delete { border-left-color: var(--status-delete); }
+    .file-name { font-size: 13.5px; font-weight: 600; }
+    .meta-line { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-secondary); }
+    .meta-line strong { color: #E4E4E8; font-weight: 500; }
+    .path-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+    .path-text { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-copy { border: 0; background: transparent; color: var(--text-muted); font-size: 11px; padding: 2px 4px; opacity: 0; }
+    .candidate-row:hover .btn-copy, .btn-copy.is-copied { opacity: 1; color: var(--gold-bright); }
+    .seg {
+      display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--bg-canvas); border: 1px solid var(--border-subtle); flex-shrink: 0;
+    }
+    .seg button { border: 1px solid transparent; background: transparent; color: var(--text-muted); border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; }
+    .seg button:hover { color: var(--text-primary); }
+    .seg button.is-keep { background: var(--status-keep-bg); border-color: var(--status-keep-border); color: var(--status-keep); }
+    .seg button.is-archive { background: var(--status-archive-bg); border-color: var(--status-archive-border); color: var(--status-archive); }
+    .seg button.is-delete { background: var(--status-delete-bg); border-color: var(--status-delete-border); color: var(--status-delete); }
+    .partial-card { border-left: 3px solid var(--status-archive); }
+    .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.78); backdrop-filter: blur(8px); }
+    .modal-card { width: min(760px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--bg-surface); border: 1px solid var(--border-gold-subtle); border-radius: 12px; padding: 22px; box-shadow: 0 0 24px rgba(212,175,55,0.16); }
+    .modal-card.danger { border-color: var(--status-delete-border); }
+    .modal-head { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; margin-bottom: 14px; }
+    .modal-head h2 { margin: 0; font-size: 16px; }
+    .modal-head p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; }
+    .count-card { border-radius: 10px; padding: 12px; text-align: center; border: 1px solid var(--border-subtle); background: var(--bg-canvas); }
+    .count-card .num { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .count-card.keep { color: var(--status-keep); border-color: var(--status-keep-border); background: var(--status-keep-bg); }
+    .count-card.archive { color: var(--status-archive); border-color: var(--status-archive-border); background: var(--status-archive-bg); }
+    .count-card.delete { color: var(--status-delete); border-color: var(--status-delete-border); background: var(--status-delete-bg); }
+    .check-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-canvas); margin-top: 8px; }
+    .check-row.danger { border-color: var(--status-delete-border); background: var(--status-delete-bg); }
+    .impact-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border-subtle); }
+    .text-keep { color: var(--status-keep); }
+    .text-delete { color: var(--status-delete); }
+    .text-gold { color: var(--gold-bright); }
+    #btnCopyCompose.is-copied { color: var(--status-keep); border-color: var(--status-keep-border); }
+    .font-bold { font-weight: 700; }
+    .italic { font-style: italic; }
+    @media (max-width: 1023px) {
+      .icon-btn.menu { display: grid; }
+      .sidebar { position: fixed; z-index: 70; transform: translateX(-105%); transition: transform 0.18s ease; }
+      .sidebar.is-open { transform: none; }
+      .sidebar-backdrop.is-open { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 60; }
+      .view-label { display: none; }
+      .candidate-row { flex-direction: column; align-items: stretch; }
+      .form-grid, .choice-grid.cols-3, .choice-grid.cols-2, .count-grid { grid-template-columns: 1fr; }
+      #searchInput { width: 100%; }
+      .topbar { height: auto; min-height: 60px; padding: 8px 12px; flex-wrap: wrap; }
+    }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col">
-
-  <!-- Top Navbar -->
-  <nav class="glass sticky top-0 z-40 border-b border-slate-800 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 via-pink-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-violet-500/20">
-        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-        </svg>
-      </div>
-      <div>
-        <h1 class="text-lg font-extrabold bg-gradient-to-r from-violet-300 via-pink-300 to-cyan-300 bg-clip-text text-transparent">
-          FindDuplicates Dashboard
-        </h1>
-        <div class="flex items-center gap-2">
-          <span id="scanStatusIndicator" class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-          <p class="text-[11px] text-slate-400" id="statusMessage">Scans are strictly read-only. Report ready for review.</p>
+<body>
+  <div class="app-shell">
+    <div id="sidebarBackdrop" class="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <aside id="appSidebar" class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 7h10a4 4 0 0 1 0 8H8"/><path d="M8 7v10"/><path d="M14 15h6"/>
+          </svg>
         </div>
-      </div>
-    </div>
-
-    <!-- Quick Actions & Stats -->
-    <div class="flex flex-wrap items-center gap-2 text-xs">
-      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
-        <span class="text-slate-400">Scanned:</span>
-        <span id="statScanned" class="font-bold text-violet-400">0</span>
-      </div>
-      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
-        <span class="text-slate-400">Manga Dupes:</span>
-        <span id="statMangaDupes" class="font-bold text-pink-400">0</span>
-      </div>
-      <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center gap-1.5">
-        <span class="text-slate-400">Doujinshi Dupes:</span>
-        <span id="statDoujinDupes" class="font-bold text-cyan-400">0</span>
-      </div>
-
-      <!-- Action Buttons -->
-      <button onclick="toggleLogConsole()" id="btnToggleLogs"
-              class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5">
-        <span id="navLogDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
-        <span>Scan Logs</span>
-        <span id="navLogCount" class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded-full text-slate-400 font-mono">0</span>
-      </button>
-
-      <button onclick="openScanModal()" id="btnOpenScanModal"
-              class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs shadow-md shadow-cyan-600/30 transition flex items-center gap-1.5">
-        <span>🚀 Quick Scan</span>
-      </button>
-
-      <button onclick="switchTab('jobs')"
-              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-cyan-300 transition flex items-center gap-1.5">
-        <span>🎯 Scan Jobs</span>
-      </button>
-
-      <button onclick="switchTab('reports')"
-              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5">
-        <span>📂 Saved Reports</span>
-      </button>
-
-      <button onclick="openCasaOSModal()"
-              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5">
-        <span>🏠 CasaOS Guide</span>
-      </button>
-
-      <button onclick="openConfirmModal()" id="btnReviewActions"
-              class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 via-pink-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 font-bold text-xs shadow-md shadow-pink-600/30 transition flex items-center gap-1.5">
-        <span>⚡ Review & Confirm Removal</span>
-        <span id="actionBadge" class="bg-white/20 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
-      </button>
-    </div>
-  </nav>
-
-  <!-- Safety Banner -->
-  <div class="bg-slate-900/80 border-b border-slate-800 px-6 py-2 text-xs flex flex-wrap items-center justify-between gap-2 text-slate-400">
-    <div class="flex items-center gap-2">
-      <span class="text-emerald-400 font-bold">🛡️ READ-ONLY GUARANTEE:</span>
-      <span>Scans only generate reports. No files are ever moved or deleted automatically. All changes require explicit manual confirmation in the pop-up below.</span>
-    </div>
-    <div class="flex items-center gap-3 text-[11px]">
-      <span class="text-slate-400">Active View: <strong id="activeViewLabel" class="text-slate-200">Report Resolution Window</strong></span>
-    </div>
-  </div>
-
-  <!-- Front Page Active Report & Quick Actions Strip -->
-  <div class="bg-slate-900/90 border-b border-slate-800 px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-    <div class="flex flex-wrap items-center gap-3">
-      <div class="flex items-center gap-1.5 font-medium">
-        <span class="text-violet-400 font-bold flex items-center gap-1">
-          <span>📄 Active Report:</span>
-        </span>
-        <span id="activeReportNameBadge" class="font-mono font-bold text-slate-200 bg-slate-950 px-2.5 py-0.5 rounded border border-slate-800 text-[11px]">latest_report.json</span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <a id="btnViewHtmlReport" href="/api/reports/download/latest_report.html" target="_blank"
-           class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
-          <span>🌐 HTML Report ↗</span>
-        </a>
-        <a id="btnDownloadCsvReport" href="/api/reports/download/latest_report.csv" download
-           class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
-          <span>📥 CSV</span>
-        </a>
-        <a id="btnDownloadJsonReport" href="/api/reports/download/latest_report.json" download
-           class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
-          <span>📄 JSON</span>
-        </a>
-        <button id="btnDiscardActiveReport" onclick="discardActiveReport()" title="Discard currently generated/loaded report from the Resolution Window"
-                class="px-2.5 py-1 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-800/80 text-rose-300 hover:text-rose-200 font-semibold text-[11px] flex items-center gap-1 transition shadow-sm">
-          <span>🗑️ Discard Report</span>
-        </button>
-      </div>
-    </div>
-    <div class="flex items-center gap-2">
-      <button onclick="switchTab('reports')"
-              class="px-3 py-1 rounded-lg bg-violet-600/25 hover:bg-violet-600/40 border border-violet-500/40 text-violet-200 font-bold text-[11px] flex items-center gap-1.5 transition">
-        <span>📜 Saved Reports & History</span>
-        <span id="reportsCountBadge" class="bg-violet-500/30 px-1.5 py-0.2 rounded-full text-[10px] text-violet-300">0</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Main Container -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-
-    <!-- Live Scan Activity Console Panel -->
-    <div id="liveScanConsolePanel" class="hidden glass rounded-2xl p-5 border border-cyan-500/30 shadow-2xl transition-all duration-300">
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-cyan-950/90 border border-cyan-800/80 flex items-center justify-center text-cyan-400 font-mono text-sm font-bold shadow-inner">
-            &gt;_
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-sm font-extrabold text-slate-100 flex items-center gap-1.5">
-                <span>Live Scan Activity Output</span>
-              </h2>
-              <span id="consoleStatusBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 scanning-pulse flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                <span id="consoleStatusText">Scanning...</span>
-              </span>
-            </div>
-            <p id="consoleSubProgress" class="text-xs text-slate-400 font-mono truncate max-w-2xl mt-0.5">Initializing scan job...</p>
+        <div class="brand-copy">
+          <h1>FindDuplicates</h1>
+          <div class="brand-status">
+            <span id="scanStatusIndicator" class="status-dot dot-idle"></span>
+            <p id="statusMessage">Scans are strictly read-only. Report ready for review.</p>
           </div>
         </div>
-
-        <!-- Console Control Buttons -->
-        <div class="flex items-center gap-2 text-xs">
-          <button onclick="toggleAutoScroll()" id="btnAutoScroll"
-                  class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 hover:text-white text-[11px] font-mono transition">
-            Auto-Scroll: ON
-          </button>
-          <button onclick="clearScanLogs()"
-                  class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-[11px] transition">
-            Clear Logs
-          </button>
-          <button onclick="toggleConsoleMinimize()" id="btnMinimizeConsole"
-                  class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-[11px] transition">
-            Minimize
-          </button>
-          <button onclick="closeLogConsole()" title="Close Log Console"
-                  class="w-7 h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-100 text-base font-bold transition">
-            &times;
-          </button>
-        </div>
       </div>
 
-      <!-- Console Body / Terminal -->
-      <div id="consoleBodyContainer" class="space-y-2 mt-3">
-        <div id="consoleLogOutput"
-             class="bg-slate-950/95 border border-slate-800 rounded-xl p-3.5 font-mono text-xs max-h-64 min-h-[140px] overflow-y-auto space-y-1 custom-scrollbar select-text text-slate-300">
-          <div class="text-slate-500 italic">No scan logs captured yet. Start a scan or parse an offline dump to view real-time execution steps.</div>
-        </div>
-        <!-- Progress Bar Indicator -->
-        <div id="consoleProgressBar" class="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden">
-          <div class="h-full bg-gradient-to-r from-violet-500 via-pink-500 to-cyan-400 animate-pulse rounded-full w-full"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab Bar & Toolbar -->
-    <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 glass p-4 rounded-2xl">
-      <!-- Tabs -->
-      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
-        <button onclick="switchTab('report')" id="tab-report" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 text-white shadow-sm flex items-center gap-1.5 transition">
-          <span>📄 Report</span>
-          <span id="tabReportDuplicatesBadge" class="bg-white/20 text-white text-[10px] px-1.5 py-0.2 rounded-full border border-white/30">0</span>
+      <div class="scan-split">
+        <button type="button" onclick="openScanModal()" id="btnOpenScanModal" class="btn-quick-scan" title="Open scan configuration">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+          Quick Scan
         </button>
-        <button onclick="switchTab('jobs')" id="tab-jobs" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 transition">
-          <span>🎯 Scan Jobs</span>
-          <span id="tabJobsCountBadge" class="bg-cyan-500/20 text-cyan-300 text-[10px] px-1.5 py-0.2 rounded-full border border-cyan-500/30">0</span>
-        </button>
-        <button onclick="switchTab('reports')" id="tab-reports" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 transition">
-          <span>📂 Saved Reports</span>
-          <span id="tabReportsCountBadge" class="bg-violet-500/20 text-violet-300 text-[10px] px-1.5 py-0.2 rounded-full border border-violet-500/30">0</span>
-        </button>
-        <button onclick="switchTab('samples')" id="tab-samples" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 transition">
-          <span>📂 Offline Tree Dumps</span>
+        <button type="button" onclick="openScanModal()" class="btn-custom-scan" title="Run custom scan">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="12" r="2"/><circle cx="15" cy="17" r="2"/>
+          </svg>
         </button>
       </div>
 
-      <!-- Quick Actions -->
-      <div class="flex items-center gap-2">
-        <button onclick="openScanModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs text-white shadow-md shadow-cyan-600/30 flex items-center gap-1.5 transition">
-          <span>🚀 Run Scan</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Tab Content: Sample Trees Loader -->
-    <div id="samplesView" class="hidden glass p-6 rounded-2xl space-y-4">
-      <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
-        <span>⚡ Quick Ingestion from Sample Data Dumps</span>
-      </h2>
-      <p class="text-xs text-slate-400">
-        Run instant offline duplicate detection directly against the tree dump files located in your workspace without needing storage drives mounted:
-      </p>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
-          <div>
-            <span class="text-[10px] uppercase font-bold text-violet-400 tracking-wider">Manga Hierarchy (Fixed)</span>
-            <h3 class="text-sm font-bold text-slate-200 mt-1">sample_data/Manga/manga.txt</h3>
-            <p class="text-xs text-slate-400 mt-1">47,707 lines covering Manga_1, Manga_A2, Manga_CBZ, Manhwa_CBZ.</p>
-          </div>
-          <button onclick="parseSampleTree('sample_data/Manga/manga.txt')" class="w-full py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-bold transition">
-            Parse Manga Tree
-          </button>
-        </div>
-
-        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
-          <div>
-            <span class="text-[10px] uppercase font-bold text-pink-400 tracking-wider">Doujinshi Roots (Global)</span>
-            <h3 class="text-sm font-bold text-slate-200 mt-1">sample_data/H/h_new_b2.txt</h3>
-            <p class="text-xs text-slate-400 mt-1">13,068 lines spanning 000 NEW, staging folders, and archives.</p>
-          </div>
-          <button onclick="parseSampleTree('sample_data/H/h_new_b2.txt')" class="w-full py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-xs font-bold transition">
-            Parse Doujinshi (h_new_b2)
-          </button>
-        </div>
-
-        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between space-y-3">
-          <div>
-            <span class="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Doujinshi Cross-Directory</span>
-            <h3 class="text-sm font-bold text-slate-200 mt-1">sample_data/H/h_temp_d.txt</h3>
-            <p class="text-xs text-slate-400 mt-1">13,087 lines spanning TempD and cross-archive works.</p>
-          </div>
-          <button onclick="parseSampleTree('sample_data/H/h_temp_d.txt')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-bold transition">
-            Parse Doujinshi (h_temp_d)
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab Content: Scan Jobs Management View (NEW) -->
-    <div id="jobsView" class="hidden glass p-6 rounded-2xl space-y-6">
-      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-        <div>
-          <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
-            <span>🎯 Scan Jobs Manager</span>
-          </h2>
-          <p class="text-xs text-slate-400 mt-0.5">
-            Create and manage user-executable scan jobs with custom libraries (Manga / Manhwa, Doujinshi), multiple target directory paths, and detection modalities. Saved jobs persist across restarts.
-          </p>
-        </div>
-        <div class="flex items-center gap-2 text-xs">
-          <button onclick="toggleCreateJobForm()" id="btnToggleCreateJob"
-                  class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-white shadow-md shadow-cyan-600/30 flex items-center gap-1.5 transition">
-            <span>+ Create New Scan Job</span>
-          </button>
-          <button onclick="loadScanJobs()"
-                  class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition">
-            <span>🔄 Refresh</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Create / Edit Job Panel (Collapsible) -->
-      <div id="createJobFormPanel" class="p-5 rounded-2xl bg-slate-900/90 border border-cyan-500/40 shadow-xl space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-          <h3 id="jobFormTitle" class="text-sm font-extrabold text-slate-100 flex items-center gap-2">
-            <span>⚡ Create New Scan Job</span>
-          </h3>
-          <button onclick="cancelJobEdit()" class="text-slate-400 hover:text-slate-200 text-xs font-semibold">&times; Close</button>
-        </div>
-
-        <input type="hidden" id="editJobId" value="">
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Job Name -->
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-slate-300">Job Name (User-Defined):</label>
-            <input type="text" id="jobNameInput" placeholder="e.g. Weekly NAS Manga Scan, Doujinshi HDD Backup"
-                   class="w-full bg-slate-950 border border-slate-700 px-3.5 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
-          </div>
-
-          <!-- Target Library -->
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-slate-300">Target Library Type:</label>
-            <select id="jobTargetTypeSelect" class="w-full bg-slate-950 border border-slate-700 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
-              <option value="manga">📚 Manga / Manhwa (Intra-Series Scoped)</option>
-              <option value="doujinshi">🌸 Doujinshi (Global Cross-Directory Scoped)</option>
-              <option value="all">⚡ Both Libraries (Comprehensive Full Scan)</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Target Locations (Multiple paths supported) -->
-        <div class="space-y-1.5">
-          <div class="flex items-center justify-between">
-            <label class="block text-xs font-bold text-slate-300">
-              Target Locations / Directories <span class="text-cyan-400 font-normal">(Can be multiple &mdash; enter one path per line)</span>:
-            </label>
-            <div class="flex items-center gap-2 text-[10px]">
-              <button type="button" onclick="appendJobPresetPath('/sg2b/Share2sgb/Manga')" class="text-violet-400 hover:underline">+ Manga NAS</button>
-              <button type="button" onclick="appendJobPresetPath('/media/devmon/L500/Vere NewFolder')" class="text-pink-400 hover:underline">+ Doujinshi Disk</button>
-            </div>
-          </div>
-          <textarea id="jobPathsInput" rows="3"
-                    placeholder="/sg2b/Share2sgb/Manga&#10;/media/devmon/L500/Vere NewFolder&#10;G:\My Manga Archive"
-                    class="w-full bg-slate-950 border border-slate-700 p-3 rounded-xl text-xs font-mono text-slate-100 focus:outline-none focus:border-cyan-500 custom-scrollbar"></textarea>
-          <p class="text-[11px] text-slate-500">Enter full absolute filesystem paths or mounted volume paths. Multiple paths will be scanned sequentially in a unified job.</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Modality -->
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-slate-300">Detection Modality:</label>
-            <select id="jobModeSelect" class="w-full bg-slate-950 border border-slate-700 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
-              <option value="name">⚡ Name & Metadata (Fast, zero disk I/O overhead)</option>
-              <option value="image">👁️ Visual Perceptual Hashing (dHash / pHash artwork verification)</option>
-            </select>
-          </div>
-
-          <!-- Description / Notes -->
-          <div class="space-y-1.5">
-            <label class="block text-xs font-bold text-slate-300">Job Description / Notes (Optional):</label>
-            <input type="text" id="jobDescInput" placeholder="Optional notes for this job..."
-                   class="w-full bg-slate-950 border border-slate-700 px-3.5 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
-          </div>
-        </div>
-
-        <!-- Manga Exclusion List (Configurable per Job) -->
-        <div class="space-y-1.5">
-          <div class="flex items-center justify-between">
-            <label class="block text-xs font-bold text-slate-300">
-              Manga Exclusion List <span class="text-amber-400 font-normal">(Optional &mdash; enter Manga series/folder names to skip, one per line)</span>:
-            </label>
-            <span class="text-[10px] text-slate-500 font-mono">Case-insensitive title matching</span>
-          </div>
-          <textarea id="jobExclusionsInput" rows="2"
-                    placeholder="e.g. Flag Capture in the First Move&#10;Retired Heroes&#10;One Piece"
-                    class="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-xl text-xs font-mono text-slate-100 focus:outline-none focus:border-amber-500 custom-scrollbar"></textarea>
-          <p class="text-[11px] text-slate-500">Manga series matching these titles will be completely skipped during the scan.</p>
-        </div>
-
-        <!-- Buttons -->
-        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-          <button type="button" onclick="cancelJobEdit()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition">
-            Cancel
-          </button>
-          <button type="button" onclick="saveScanJob(false)" id="btnSaveJobOnly"
-                  class="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white transition flex items-center gap-1.5">
-            <span>💾 Save Job</span>
-          </button>
-          <button type="button" onclick="saveScanJob(true)" id="btnSaveAndRunJob"
-                  class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-xs font-bold text-white shadow-md shadow-emerald-600/30 transition flex items-center gap-1.5">
-            <span>🚀 Save & Run Now</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Saved Scan Jobs List -->
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-            <span class="text-cyan-400">📋</span>
-            <span>Saved Scan Jobs (<span id="jobsCountText">0</span>)</span>
-          </h3>
-          <span class="text-[11px] text-slate-400">Click &ldquo;Run Job Now&rdquo; to execute any job on demand</span>
-        </div>
-
-        <div id="jobsListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="p-8 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-xl text-xs">
-            Loading saved scan jobs...
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab Content: Saved Reports View -->
-    <div id="reportsView" class="hidden glass p-6 rounded-2xl space-y-6">
-      <!-- Header -->
-      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-        <div>
-          <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
-            <span>📂 Saved Duplicate Reports</span>
-          </h2>
-          <p class="text-xs text-slate-400 mt-0.5">
-            Browse all saved deduplication reports, see which scan job created each report and when, inspect interactive HTML reports, download CSV spreadsheets, remove unwanted reports, or load any report directly into the Resolution Window.
-          </p>
-        </div>
-        <div class="flex items-center gap-2 text-xs">
-          <button onclick="loadReportsAndHistory()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 transition">
-            <span>🔄 Refresh</span>
-          </button>
-          <button onclick="openScanModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-white shadow-md shadow-cyan-600/30 flex items-center gap-1.5 transition">
-            <span>🚀 Run New Scan</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Section 1: Saved Reports Directory -->
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-            <span class="text-violet-400">📂</span>
-            <span>Saved Duplicate Reports (<span id="reportsListCount">0</span>)</span>
-          </h3>
-          <span class="text-[11px] text-slate-400">Stored in <code class="text-violet-300 bg-slate-900 px-1.5 py-0.5 rounded">./reports</code></span>
-        </div>
-
-        <div id="frontPageReportsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div class="p-6 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-xl">Loading reports...</div>
-        </div>
-      </div>
-
-      <!-- Section 2: Recent Execution Run History -->
-      <div class="space-y-3 pt-2 border-t border-slate-800">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-            <span class="text-cyan-400">⚡</span>
-            <span>Recent Scan Run History</span>
-          </h3>
-          <span class="text-[11px] text-slate-400">Execution timeline & logs</span>
-        </div>
-
-        <div id="frontPageRunHistoryContainer" class="space-y-2">
-          <div class="p-4 text-center text-slate-500 bg-slate-900/50 rounded-xl text-xs">No scan runs recorded yet.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab Content: Report Resolution Window (Dedicated Report Tab) -->
-    <div id="reportViewContainer" class="space-y-4">
-      <!-- Report Controls Bar: Sub-filters, Keep All button, Pre-Select Best, Search -->
-      <div id="reportControlsBar" class="glass p-3.5 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border border-slate-800">
-        <!-- Sub-filters -->
-        <div class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
-          <button onclick="setReportFilter('all')" id="subfilter-all"
-                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white flex items-center gap-1.5 transition shadow-sm">
-            <span>All Duplicates</span>
-            <span id="subfilterCountAll" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
-          </button>
-          <button onclick="setReportFilter('manga')" id="subfilter-manga"
-                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition">
-            <span>📚 Manga</span>
-            <span id="subfilterCountManga" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
-          </button>
-          <button onclick="setReportFilter('doujinshi')" id="subfilter-doujinshi"
-                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition">
-            <span>🌸 Doujinshi</span>
-            <span id="subfilterCountDoujinshi" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
-          </button>
-          <button onclick="setReportFilter('partials')" id="subfilter-partials"
-                  class="subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition">
-            <span>⚠️ Partials / Splits</span>
-            <span id="subfilterCountPartials" class="bg-black/30 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
-          </button>
-        </div>
-
-        <!-- Quick Actions & Search -->
-        <div class="flex items-center gap-2 flex-wrap">
-          <!-- KEEP ALL BUTTON: Keeps both duplicates across all groups -->
-          <button onclick="keepAllDuplicates()" id="btnKeepAll"
-                  title="Keep Both Duplicates: Marks all items across all duplicate groups to 'Keep' so nothing is moved or deleted"
-                  class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white shadow-md shadow-emerald-600/30 transition flex items-center gap-1.5">
-            <span>🛡️ Keep All</span>
-          </button>
-          <button onclick="autoSelectRecommended()"
-                  title="Marks recommended highest quality copy to stay, and duplicates to be moved to archive"
-                  class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
-            <span>✨ Pre-Select Best</span>
-          </button>
-          <input id="searchInput" type="text" placeholder="Filter duplicate items..."
-                 class="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl text-xs focus:outline-none focus:border-violet-500 w-44 md:w-56 text-slate-200">
-        </div>
-      </div>
-
-      <!-- Cards Container: The Report Resolution Window -->
-      <div id="cardsContainer" class="space-y-4">
-        <div class="p-12 text-center text-slate-500 glass rounded-2xl">
-          Loading duplicate groups from report...
-        </div>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- ===================================================================== -->
-  <!-- MODAL: RUN SCAN & CONFIGURE PATHS                                     -->
-  <!-- ===================================================================== -->
-  <div id="scanModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-    <div class="glass max-w-2xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div>
-          <h2 class="text-lg font-extrabold text-slate-100 flex items-center gap-2">
-            <span>🚀 Run Scan (Read-Only Report Generation)</span>
-          </h2>
-          <p class="text-xs text-slate-400">The scan will only analyze and create a report. It will never modify or remove files.</p>
-        </div>
-        <button onclick="closeScanModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
-      </div>
-
-      <!-- Target Selection -->
-      <div class="space-y-2">
-        <label class="block text-xs font-bold text-slate-300">Scan Target Library:</label>
-        <div class="grid grid-cols-3 gap-2">
-          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-violet-500 transition">
-            <input type="radio" name="scanTarget" value="manga" checked class="accent-violet-600">
-            <div>
-              <div class="text-xs font-bold text-slate-200">📚 Manga / Manhwa</div>
-              <div class="text-[10px] text-slate-400">Intra-Series Scope</div>
-            </div>
-          </label>
-          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-pink-500 transition">
-            <input type="radio" name="scanTarget" value="doujinshi" class="accent-pink-600">
-            <div>
-              <div class="text-xs font-bold text-slate-200">🌸 Doujinshi (H)</div>
-              <div class="text-[10px] text-slate-400">Global Cross-Directory</div>
-            </div>
-          </label>
-          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-cyan-500 transition">
-            <input type="radio" name="scanTarget" value="all" class="accent-cyan-600">
-            <div>
-              <div class="text-xs font-bold text-slate-200">⚡ Both Libraries</div>
-              <div class="text-[10px] text-slate-400">Full Comprehensive Scan</div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- Mode Selection -->
-      <div class="space-y-2">
-        <label class="block text-xs font-bold text-slate-300">Detection Modality:</label>
-        <div class="grid grid-cols-2 gap-2">
-          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-cyan-500 transition">
-            <input type="radio" name="scanMode" value="name" checked class="accent-cyan-600">
-            <div>
-              <div class="text-xs font-bold text-slate-200">⚡ Name & Metadata (Fast)</div>
-              <div class="text-[10px] text-slate-400">Chapter numbers, tags, scanlators (zero I/O overhead)</div>
-            </div>
-          </label>
-          <label class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-violet-500 transition">
-            <input type="radio" name="scanMode" value="image" class="accent-violet-600">
-            <div>
-              <div class="text-xs font-bold text-slate-200">👁️ Visual Perceptual Hashing</div>
-              <div class="text-[10px] text-slate-400">Verifies identical artwork via dHash / pHash</div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- Scan Paths Input -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <label class="block text-xs font-bold text-slate-300">Target Scan Directories (one path per line):</label>
-          <span class="text-[10px] text-slate-400">Single or multiple paths supported</span>
-        </div>
-        <textarea id="scanPathsInput" rows="4"
-                  placeholder="/sg2b/Share2sgb/Manga&#10;/media/devmon/L500/Vere NewFolder"
-                  class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-mono focus:outline-none focus:border-cyan-500 custom-scrollbar"></textarea>
-
-        <!-- Quick-Fill Preset Buttons -->
-        <div class="space-y-1.5 pt-1">
-          <div class="text-[11px] text-slate-400 font-semibold">Quick-Add Configured Paths:</div>
-          <div class="flex flex-wrap gap-1.5 text-xs">
-            <button type="button" onclick="appendScanPath('/sg2b/Share2sgb/Manga')"
-                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
-              + /sg2b/Share2sgb/Manga (Manga)
-            </button>
-            <button type="button" onclick="appendScanPath('/media/devmon/L500/Vere NewFolder')"
-                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px]">
-              + /media/devmon/L500/Vere NewFolder (Doujinshi)
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Live Scan Activity Output inside Modal -->
-      <div id="modalScanLogContainer" class="hidden space-y-2 pt-2 border-t border-slate-800">
-        <div class="flex items-center justify-between text-xs font-mono">
-          <span class="text-cyan-400 font-bold flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-cyan-400 scanning-pulse"></span>
-            <span>Running Scan:</span>
-            <span id="modalCurrentStep" class="text-slate-300 font-normal">Resolving directories...</span>
+      <div class="nav-section-label">Navigation</div>
+      <nav class="nav-list">
+        <button type="button" onclick="switchTab('report')" id="tab-report" class="nav-item tab-btn is-active">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg>
+            Resolution Report
           </span>
-          <button type="button" onclick="closeScanModal()" class="text-slate-400 hover:text-cyan-300 text-[11px] underline">
-            Run in Background ↗
-          </button>
-        </div>
-        <div id="modalScanTerminal"
-             class="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs max-h-44 min-h-[100px] overflow-y-auto space-y-1 custom-scrollbar text-slate-300 select-text">
-          <div class="text-slate-500 italic">Initializing run logs...</div>
-        </div>
-      </div>
-
-      <!-- Live Scan Message Box -->
-      <div id="scanStatusBox" class="hidden p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300"></div>
-
-      <!-- Footer Buttons -->
-      <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-        <button onclick="closeScanModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300">
-          Cancel
+          <span id="tabReportDuplicatesBadge" class="nav-count">0</span>
         </button>
-        <button onclick="launchScan()" id="btnStartScan"
-                class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-xs font-bold shadow-lg shadow-cyan-600/30 flex items-center gap-1.5">
-          <span>▶️ Generate Report</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===================================================================== -->
-  <!-- MODAL: LOAD SAVED REPORT                                              -->
-  <!-- ===================================================================== -->
-  <div id="reportsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-    <div class="glass max-w-xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div>
-          <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
-            <span>📂 Saved Duplicate Reports</span>
-          </h2>
-          <p class="text-xs text-slate-400">Select any generated report to open in the Resolution Window.</p>
-        </div>
-        <button onclick="closeReportsModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
-      </div>
-      <div id="reportsListContainer" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
-        <div class="text-center p-6 text-slate-500 text-xs">Loading saved reports...</div>
-      </div>
-      <div class="flex justify-end pt-2 border-t border-slate-800">
-        <button onclick="closeReportsModal()" class="px-4 py-1.5 rounded-xl bg-slate-800 text-xs text-slate-300 hover:bg-slate-700">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===================================================================== -->
-  <!-- MODAL: CASAOS IMPORT GUIDE & PRE-CONFIGURED COMPOSE                   -->
-  <!-- ===================================================================== -->
-  <div id="casaosModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-    <div class="glass max-w-3xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div>
-          <h2 class="text-lg font-extrabold text-slate-100 flex items-center gap-2">
-            <span>🏠 1-Click Import into CasaOS</span>
-          </h2>
-          <p class="text-xs text-slate-400">Pre-configured with your storage paths (/sg2b/Share2sgb/Manga & /media/devmon/L500/Vere NewFolder).</p>
-        </div>
-        <button onclick="closeCasaOSModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-          <div class="font-bold text-violet-400">Step 1: Open CasaOS</div>
-          <p class="text-slate-300">Go to your CasaOS Web Dashboard, click <strong>App Store</strong>, then click <strong>Custom Install</strong> in the top right.</p>
-        </div>
-        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-          <div class="font-bold text-pink-400">Step 2: Click Import</div>
-          <p class="text-slate-300">Click the <strong>Import</strong> icon (top right corner of the install window) to open the docker-compose YAML editor.</p>
-        </div>
-        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-          <div class="font-bold text-cyan-400">Step 3: Paste & Submit</div>
-          <p class="text-slate-300">Copy the YAML below, paste it into CasaOS, and click <strong>Submit</strong>. The app tile will appear on your dashboard!</p>
-        </div>
-      </div>
-
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-slate-300">CasaOS Ready Docker Compose YAML:</span>
-          <button onclick="copyComposeYAML()" id="btnCopyCompose"
-                  class="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 font-bold text-xs text-white shadow-sm flex items-center gap-1 transition">
-            📋 Copy Compose YAML
-          </button>
-        </div>
-        <pre id="composeCodeBlock" class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 max-h-52 overflow-y-auto custom-scrollbar"></pre>
-      </div>
-
-      <div class="flex items-center justify-end pt-2 border-t border-slate-800">
-        <button onclick="closeCasaOSModal()" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300">
-          Close Guide
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===================================================================== -->
-  <!-- POP-UP CONFIRMATION MODAL: MANDATORY CONFIRMATION BEFORE REMOVAL      -->
-  <!-- ===================================================================== -->
-  <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-    <div class="glass max-w-3xl w-full p-6 rounded-2xl border-2 border-rose-500/60 shadow-2xl space-y-5">
-      <!-- Header with Warning Icon -->
-      <div class="flex items-start justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0">
-            <svg class="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-            </svg>
-          </div>
-          <div>
-            <h2 class="text-lg font-black text-slate-100 flex items-center gap-2">
-              <span>⚠️ Pop-Up Confirmation: File Removal / Relocation</span>
-            </h2>
-            <p class="text-xs text-rose-300 font-semibold mt-0.5">
-              Warning: The engine will not proceed without your explicit verification.
-            </p>
-          </div>
-        </div>
-        <button onclick="closeConfirmModal()" class="text-slate-400 hover:text-slate-200 text-xl font-bold p-1">&times;</button>
-      </div>
-
-      <!-- Action Counts Summary -->
-      <div class="grid grid-cols-3 gap-3 text-center">
-        <div class="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60">
-          <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider">Keep Untouched</div>
-          <div id="modalKeepCount" class="text-2xl font-black text-emerald-300 mt-1">0</div>
-        </div>
-        <div class="p-3 rounded-xl bg-amber-950/40 border border-amber-800/60">
-          <div class="text-xs text-amber-400 font-bold uppercase tracking-wider">Move to Archive</div>
-          <div id="modalMoveCount" class="text-2xl font-black text-amber-300 mt-1">0</div>
-        </div>
-        <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60">
-          <div class="text-xs text-rose-400 font-bold uppercase tracking-wider">Delete Permanently</div>
-          <div id="modalDeleteCount" class="text-2xl font-black text-rose-300 mt-1">0</div>
-        </div>
-      </div>
-
-      <!-- Itemized Impacted Files List -->
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between text-xs font-bold text-slate-300">
-          <span>Files Being Moved or Deleted:</span>
-          <span id="impactedCountBadge" class="text-[11px] text-slate-400">0 items</span>
-        </div>
-        <div id="impactedFilesList" class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono max-h-44 overflow-y-auto space-y-1.5 custom-scrollbar text-slate-300">
-          <div class="text-slate-500 italic">No files marked for archive or deletion.</div>
-        </div>
-      </div>
-
-      <!-- Destination Configuration -->
-      <div class="space-y-1.5">
-        <label class="block text-xs font-semibold text-slate-300">Archive Destination Directory:</label>
-        <input id="archiveDirInput" type="text" value="./archive"
-               class="w-full bg-slate-900 border border-slate-700 px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-violet-500 font-mono">
-      </div>
-
-      <!-- Safety Dry Run Toggle & Mandatory Confirmation Checkbox -->
-      <div class="space-y-2 pt-1">
-        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800">
-          <div>
-            <div class="text-xs font-bold text-slate-200">Dry Run Mode (Simulate Only)</div>
-            <div class="text-[11px] text-slate-400">Verifies permissions and logs actions without moving or deleting files.</div>
-          </div>
-          <input id="dryRunToggle" type="checkbox" checked class="w-5 h-5 accent-violet-600 cursor-pointer">
-        </div>
-
-        <label class="flex items-center gap-2.5 p-3 rounded-xl bg-rose-950/25 border border-rose-800/50 cursor-pointer">
-          <input id="mandatoryConfirmCheckbox" type="checkbox" onchange="toggleExecuteButtonState()" class="w-4 h-4 accent-rose-600 cursor-pointer shrink-0">
-          <span class="text-xs text-rose-200 font-medium">
-            I have reviewed the report in the Resolution Window and confirm these file actions.
+        <button type="button" onclick="switchTab('jobs')" id="tab-jobs" class="nav-item tab-btn">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
+            Scan Jobs
           </span>
-        </label>
+          <span id="tabJobsCountBadge" class="nav-count">0</span>
+        </button>
+        <button type="button" onclick="switchTab('reports')" id="tab-reports" class="nav-item tab-btn">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            Saved Reports
+          </span>
+          <span id="tabReportsCountBadge" class="nav-count">0</span>
+          <span id="reportsCountBadge" class="sr-only" aria-hidden="true">0</span>
+        </button>
+        <button type="button" onclick="switchTab('samples')" id="tab-samples" class="nav-item tab-btn">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg>
+            Offline Tree Dumps
+          </span>
+        </button>
+      </nav>
+
+      <div class="telemetry-card">
+        <div class="telemetry-label">Current scan</div>
+        <div class="telemetry-grid">
+          <div class="telemetry-cell"><span id="statScanned" class="telemetry-val">0</span><span class="telemetry-lbl">Scanned</span></div>
+          <div class="telemetry-cell"><span id="statMangaDupes" class="telemetry-val gold">0</span><span class="telemetry-lbl">Manga</span></div>
+          <div class="telemetry-cell"><span id="statDoujinDupes" class="telemetry-val gold">0</span><span class="telemetry-lbl">Doujinshi</span></div>
+        </div>
       </div>
 
-      <!-- Live Execution Log Container -->
-      <div id="executionResultBox" class="hidden p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono max-h-44 overflow-y-auto space-y-1.5 custom-scrollbar"></div>
+      <div class="sidebar-footer">
+        <div class="nav-section-label">Utilities</div>
+        <button type="button" onclick="toggleLogConsole()" id="btnToggleLogs" class="util-btn">
+          <span class="util-left"><span id="navLogDot" class="nav-log-dot dot-idle"></span> Scan Logs</span>
+          <span id="navLogCount" class="nav-count">0</span>
+        </button>
+        <button type="button" onclick="openCasaOSModal()" class="util-btn">
+          <span class="util-left">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+            CasaOS Guide
+          </span>
+        </button>
+        <div class="safe-wrap">
+          <button type="button" class="safe-pill" aria-describedby="readOnlyPopover">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 3v6c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V6l8-3z"/></svg>
+            Read-Only Safe Mode
+          </button>
+          <div id="readOnlyPopover" class="safe-popover">Scans only generate reports. No files are ever moved or deleted automatically. All changes require explicit manual confirmation.</div>
+        </div>
+      </div>
+    </aside>
 
-      <!-- Footer Action Buttons -->
-      <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-        <button onclick="closeConfirmModal()" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300">
-          Cancel (Do Not Touch Anything)
-        </button>
-        <button onclick="executeActionPlan()" id="btnExecutePlan" disabled
-                class="px-6 py-2 rounded-xl bg-rose-700 text-white font-bold text-xs opacity-50 cursor-not-allowed transition flex items-center gap-1.5">
-          <span>✓ Yes, Execute Confirmed Actions</span>
-        </button>
+    <div class="main-column">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button type="button" class="icon-btn menu" onclick="toggleSidebar()" aria-label="Open navigation">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div class="view-label">Active View: <strong id="activeViewLabel">Report Resolution Window</strong></div>
+          <div class="report-pill" title="Active report">
+            <span class="report-dot"></span>
+            <span id="activeReportNameBadge">latest_report.json</span>
+          </div>
+          <div class="export-wrap" id="exportWrap">
+            <button type="button" class="btn-ghost" id="exportBtn" onclick="toggleExportMenu(event)">Export</button>
+            <div id="exportMenu" class="export-menu hidden">
+              <a id="btnViewHtmlReport" href="/api/reports/download/latest_report.html" target="_blank">HTML Report</a>
+              <a id="btnDownloadCsvReport" href="/api/reports/download/latest_report.csv" download>CSV</a>
+              <a id="btnDownloadJsonReport" href="/api/reports/download/latest_report.json" download>JSON</a>
+            </div>
+          </div>
+          <button id="btnDiscardActiveReport" onclick="discardActiveReport()" class="btn-ghost btn-discard" title="Discard Active Report" aria-label="Discard Active Report">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/></svg>
+          </button>
+        </div>
+        <div class="topbar-right">
+          <button onclick="openConfirmModal()" id="btnReviewActions" class="btn-gold is-idle">
+            Review &amp; Confirm Removal
+            <span id="actionBadge">0</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <div id="liveScanConsolePanel" class="panel console-panel hidden">
+          <div class="console-head">
+            <div>
+              <div class="inline-actions">
+                <h2>Live Scan Activity</h2>
+                <span id="consoleStatusBadge" class="console-badge badge-idle"><span id="consoleStatusText">Idle</span></span>
+              </div>
+              <p id="consoleSubProgress">Initializing scan job...</p>
+            </div>
+            <div class="inline-actions">
+              <button onclick="toggleAutoScroll()" id="btnAutoScroll" class="btn-ghost is-on">Auto-Scroll: ON</button>
+              <button onclick="clearScanLogs()" class="btn-ghost">Clear Logs</button>
+              <button onclick="toggleConsoleMinimize()" id="btnMinimizeConsole" class="btn-ghost">Minimize</button>
+              <button onclick="closeLogConsole()" class="btn-ghost" title="Close Log Console" aria-label="Close Log Console">&times;</button>
+            </div>
+          </div>
+          <div id="consoleBodyContainer">
+            <div id="consoleLogOutput" class="custom-scrollbar">
+              <div class="muted italic">No scan logs captured yet. Start a scan or parse an offline dump to view real-time execution steps.</div>
+            </div>
+            <div id="consoleProgressBar" class="hidden"><div class="bar"></div></div>
+          </div>
+        </div>
+
+        <div id="samplesView" class="panel hidden">
+          <div class="panel-head">
+            <div>
+              <h2>Offline tree dumps</h2>
+              <p class="lead">Run instant offline duplicate detection against tree dump files without mounted storage.</p>
+            </div>
+          </div>
+          <div class="card-grid">
+            <div class="sample-card">
+              <div>
+                <div class="kicker">Manga hierarchy</div>
+                <h3>sample_data/Manga/manga.txt</h3>
+                <p class="lead">47,707 lines covering Manga_1, Manga_A2, Manga_CBZ, Manhwa_CBZ.</p>
+              </div>
+              <button onclick="parseSampleTree('sample_data/Manga/manga.txt')" class="btn btn-gold-ghost">Parse Manga Tree</button>
+            </div>
+            <div class="sample-card">
+              <div>
+                <div class="kicker">Doujinshi roots</div>
+                <h3>sample_data/H/h_new_b2.txt</h3>
+                <p class="lead">13,068 lines spanning 000 NEW, staging folders, and archives.</p>
+              </div>
+              <button onclick="parseSampleTree('sample_data/H/h_new_b2.txt')" class="btn btn-gold-ghost">Parse Doujinshi (h_new_b2)</button>
+            </div>
+            <div class="sample-card">
+              <div>
+                <div class="kicker">Doujinshi cross-directory</div>
+                <h3>sample_data/H/h_temp_d.txt</h3>
+                <p class="lead">13,087 lines spanning TempD and cross-archive works.</p>
+              </div>
+              <button onclick="parseSampleTree('sample_data/H/h_temp_d.txt')" class="btn btn-gold-ghost">Parse Doujinshi (h_temp_d)</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="jobsView" class="panel hidden">
+          <div class="panel-head">
+            <div>
+              <h2>Scan Jobs Manager</h2>
+              <p class="lead">Create and manage scan jobs with custom libraries, directory paths, and detection modes. Saved jobs persist across restarts.</p>
+            </div>
+            <div class="inline-actions">
+              <button onclick="toggleCreateJobForm()" id="btnToggleCreateJob" class="btn btn-gold-ghost">+ Create New Scan Job</button>
+              <button onclick="loadScanJobs()" class="btn-ghost">Refresh</button>
+            </div>
+          </div>
+
+          <div id="createJobFormPanel" class="stack">
+            <div class="inline-actions" style="justify-content:space-between">
+              <h3 id="jobFormTitle">Create New Scan Job</h3>
+              <button onclick="cancelJobEdit()" class="btn-ghost">&times; Close</button>
+            </div>
+            <input type="hidden" id="editJobId" value="">
+            <div class="form-grid">
+              <div>
+                <label class="field-label" for="jobNameInput">Job Name</label>
+                <input type="text" id="jobNameInput" class="field" placeholder="e.g. Weekly NAS Manga Scan, Doujinshi HDD Backup">
+              </div>
+              <div>
+                <label class="field-label" for="jobTargetTypeSelect">Target Library Type</label>
+                <select id="jobTargetTypeSelect" class="field">
+                  <option value="manga">Manga / Manhwa (Intra-Series Scoped)</option>
+                  <option value="doujinshi">Doujinshi (Global Cross-Directory Scoped)</option>
+                  <option value="all">Both Libraries (Comprehensive Full Scan)</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <div class="inline-actions" style="justify-content:space-between">
+                <label class="field-label" for="jobPathsInput">Target Locations (one path per line)</label>
+                <span>
+                  <button type="button" class="linkish" onclick="appendJobPresetPath('/sg2b/Share2sgb/Manga')">+ Manga NAS</button>
+                  <button type="button" class="linkish" onclick="appendJobPresetPath('/media/devmon/L500/Vere NewFolder')">+ Doujinshi Disk</button>
+                </span>
+              </div>
+              <textarea id="jobPathsInput" class="field" rows="3" placeholder="/sg2b/Share2sgb/Manga&#10;/media/devmon/L500/Vere NewFolder"></textarea>
+              <p class="hint">Multiple paths are scanned sequentially in one job.</p>
+            </div>
+            <div class="form-grid">
+              <div>
+                <label class="field-label" for="jobModeSelect">Detection Modality</label>
+                <select id="jobModeSelect" class="field">
+                  <option value="name">Name &amp; Metadata (Fast)</option>
+                  <option value="image">Visual Perceptual Hashing (dHash / pHash)</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label" for="jobDescInput">Job Description (Optional)</label>
+                <input type="text" id="jobDescInput" class="field" placeholder="Optional notes for this job...">
+              </div>
+            </div>
+            <div>
+              <label class="field-label" for="jobExclusionsInput">Manga Exclusion List (one series per line)</label>
+              <textarea id="jobExclusionsInput" class="field" rows="2" placeholder="Flag Capture in the First Move"></textarea>
+              <p class="hint">Case-insensitive title matching. Matching manga series are skipped.</p>
+            </div>
+            <div class="form-actions">
+              <button type="button" onclick="cancelJobEdit()" class="btn-ghost">Cancel</button>
+              <button type="button" onclick="saveScanJob(false)" id="btnSaveJobOnly" class="btn">Save Job</button>
+              <button type="button" onclick="saveScanJob(true)" id="btnSaveAndRunJob" class="btn btn-gold-ghost">Save &amp; Run Now</button>
+            </div>
+          </div>
+
+          <div style="margin-top:18px">
+            <div class="inline-actions" style="justify-content:space-between;margin-bottom:10px">
+              <h3 class="section-label">Saved Scan Jobs (<span id="jobsCountText">0</span>)</h3>
+              <span class="hint">Run any saved job on demand</span>
+            </div>
+            <div id="jobsListContainer" class="card-grid">
+              <div class="empty-state">Loading saved scan jobs...</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="reportsView" class="panel hidden">
+          <div class="panel-head">
+            <div>
+              <h2>Saved Duplicate Reports</h2>
+              <p class="lead">Browse saved reports, open them in the resolution window, or download HTML, CSV, and JSON.</p>
+            </div>
+            <div class="inline-actions">
+              <button onclick="loadReportsAndHistory()" class="btn-ghost">Refresh</button>
+              <button onclick="openScanModal()" class="btn btn-gold-ghost">Run New Scan</button>
+            </div>
+          </div>
+          <div class="inline-actions" style="justify-content:space-between;margin-bottom:10px">
+            <h3 class="section-label">Saved Duplicate Reports (<span id="reportsListCount">0</span>)</h3>
+            <span class="hint">Stored in ./reports</span>
+          </div>
+          <div id="frontPageReportsContainer" class="card-grid">
+            <div class="empty-state">Loading reports...</div>
+          </div>
+          <div style="margin-top:18px">
+            <h3 class="section-label">Recent Scan Run History</h3>
+            <div id="frontPageRunHistoryContainer" style="margin-top:10px">
+              <div class="empty-state">No scan runs recorded yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="reportViewContainer">
+          <div id="reportControlsBar" class="filter-bar">
+            <div class="filter-tabs">
+              <button onclick="setReportFilter('all')" id="subfilter-all" class="filter-tab subfilter-btn is-active">All Duplicates <span id="subfilterCountAll" class="nav-count">0</span></button>
+              <button onclick="setReportFilter('manga')" id="subfilter-manga" class="filter-tab subfilter-btn">Manga <span id="subfilterCountManga" class="nav-count">0</span></button>
+              <button onclick="setReportFilter('doujinshi')" id="subfilter-doujinshi" class="filter-tab subfilter-btn">Doujinshi <span id="subfilterCountDoujinshi" class="nav-count">0</span></button>
+              <button onclick="setReportFilter('partials')" id="subfilter-partials" class="filter-tab subfilter-btn">Partials / Splits <span id="subfilterCountPartials" class="nav-count">0</span></button>
+            </div>
+            <div class="filter-actions">
+              <div class="search-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                <input id="searchInput" type="text" placeholder="Filter duplicate items...">
+              </div>
+              <button onclick="keepAllDuplicates()" id="btnKeepAll" class="btn btn-keep" title="Keep Both Duplicates: Marks all items across all duplicate groups to Keep so nothing is moved or deleted">Keep All</button>
+              <button onclick="autoSelectRecommended()" class="btn btn-gold-ghost" title="Marks recommended highest quality copy to stay, and duplicates to be moved to archive">Pre-Select Best</button>
+            </div>
+          </div>
+          <div id="cardsContainer">
+            <div class="empty-state">Loading duplicate groups from report...</div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="scanModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h2>Run Scan</h2>
+          <p>The scan only analyzes and creates a report. It never modifies or removes files.</p>
+        </div>
+        <button onclick="closeScanModal()" class="btn-ghost" aria-label="Close">&times;</button>
+      </div>
+      <div class="stack">
+        <div>
+          <span class="field-label">Scan Target Library</span>
+          <div class="choice-grid cols-3">
+            <label class="choice"><input type="radio" name="scanTarget" value="manga" checked><div><strong>Manga / Manhwa</strong><span>Intra-Series Scope</span></div></label>
+            <label class="choice"><input type="radio" name="scanTarget" value="doujinshi"><div><strong>Doujinshi</strong><span>Global Cross-Directory</span></div></label>
+            <label class="choice"><input type="radio" name="scanTarget" value="all"><div><strong>Both Libraries</strong><span>Full Comprehensive Scan</span></div></label>
+          </div>
+        </div>
+        <div>
+          <span class="field-label">Detection Modality</span>
+          <div class="choice-grid cols-2">
+            <label class="choice"><input type="radio" name="scanMode" value="name" checked><div><strong>Name &amp; Metadata</strong><span>Chapter numbers, tags, scanlators</span></div></label>
+            <label class="choice"><input type="radio" name="scanMode" value="image"><div><strong>Visual Perceptual Hashing</strong><span>Verifies artwork via dHash / pHash</span></div></label>
+          </div>
+        </div>
+        <div>
+          <label class="field-label" for="scanPathsInput">Target Scan Directories (one path per line)</label>
+          <textarea id="scanPathsInput" class="field" rows="4" placeholder="/sg2b/Share2sgb/Manga"></textarea>
+          <div class="inline-actions" style="margin-top:8px">
+            <button type="button" class="btn-ghost" onclick="appendScanPath('/sg2b/Share2sgb/Manga')">+ Manga NAS</button>
+            <button type="button" class="btn-ghost" onclick="appendScanPath('/media/devmon/L500/Vere NewFolder')">+ Doujinshi Disk</button>
+          </div>
+        </div>
+        <div id="modalScanLogContainer" class="hidden">
+          <div class="inline-actions" style="justify-content:space-between">
+            <span class="text-gold">Running Scan: <span id="modalCurrentStep">Resolving directories...</span></span>
+            <button type="button" class="linkish" onclick="closeScanModal()">Run in Background</button>
+          </div>
+          <div id="modalScanTerminal" class="custom-scrollbar"><div class="muted italic">Initializing run logs...</div></div>
+        </div>
+        <div id="scanStatusBox" class="hidden field"></div>
+        <div class="form-actions">
+          <button onclick="closeScanModal()" class="btn-ghost">Cancel</button>
+          <button onclick="launchScan()" id="btnStartScan" class="btn-gold">Generate Report</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="reportsModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h2>Saved Duplicate Reports</h2>
+          <p>Select any generated report to open in the Resolution Window.</p>
+        </div>
+        <button onclick="closeReportsModal()" class="btn-ghost" aria-label="Close">&times;</button>
+      </div>
+      <div id="reportsListContainer" class="custom-scrollbar"><div class="empty-state">Loading saved reports...</div></div>
+      <div class="form-actions"><button onclick="closeReportsModal()" class="btn-ghost">Close</button></div>
+    </div>
+  </div>
+
+  <div id="casaosModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h2>Import into CasaOS</h2>
+          <p>Pre-configured with your storage paths (/sg2b/Share2sgb/Manga and /media/devmon/L500/Vere NewFolder).</p>
+        </div>
+        <button onclick="closeCasaOSModal()" class="btn-ghost" aria-label="Close">&times;</button>
+      </div>
+      <div class="choice-grid cols-3">
+        <div class="choice"><div><strong>Step 1: Open CasaOS</strong><span>App Store, then Custom Install.</span></div></div>
+        <div class="choice"><div><strong>Step 2: Click Import</strong><span>Open the docker-compose YAML editor.</span></div></div>
+        <div class="choice"><div><strong>Step 3: Paste &amp; Submit</strong><span>Copy the YAML below and submit.</span></div></div>
+      </div>
+      <div class="inline-actions" style="justify-content:space-between;margin:12px 0">
+        <span class="field-label">CasaOS Ready Docker Compose YAML</span>
+        <button onclick="copyComposeYAML()" id="btnCopyCompose" class="btn btn-gold-ghost">Copy Compose YAML</button>
+      </div>
+      <pre id="composeCodeBlock" class="custom-scrollbar"></pre>
+      <div class="form-actions"><button onclick="closeCasaOSModal()" class="btn-ghost">Close Guide</button></div>
+    </div>
+  </div>
+
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-card danger">
+      <div class="modal-head">
+        <div>
+          <h2>Confirm file removal or relocation</h2>
+          <p>The engine will not proceed without your explicit verification.</p>
+        </div>
+        <button onclick="closeConfirmModal()" class="btn-ghost" aria-label="Close">&times;</button>
+      </div>
+      <div class="count-grid">
+        <div class="count-card keep"><div class="kicker">Keep Untouched</div><div id="modalKeepCount" class="num">0</div></div>
+        <div class="count-card archive"><div class="kicker">Move to Archive</div><div id="modalMoveCount" class="num">0</div></div>
+        <div class="count-card delete"><div class="kicker">Delete Permanently</div><div id="modalDeleteCount" class="num">0</div></div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="inline-actions" style="justify-content:space-between">
+          <span class="field-label">Files Being Moved or Deleted</span>
+          <span id="impactedCountBadge" class="hint">0 items</span>
+        </div>
+        <div id="impactedFilesList" class="custom-scrollbar"><div class="muted italic">No files marked for archive or deletion.</div></div>
+      </div>
+      <div style="margin-top:12px">
+        <label class="field-label" for="archiveDirInput">Archive Destination Directory</label>
+        <input id="archiveDirInput" class="field" type="text" value="./archive">
+      </div>
+      <div class="check-row">
+        <div>
+          <strong>Dry Run Mode (Simulate Only)</strong>
+          <div class="hint">Verifies permissions and logs actions without moving or deleting files.</div>
+        </div>
+        <input id="dryRunToggle" type="checkbox" checked>
+      </div>
+      <label class="check-row danger">
+        <input id="mandatoryConfirmCheckbox" type="checkbox" onchange="toggleExecuteButtonState()">
+        <span>I have reviewed the report in the Resolution Window and confirm these file actions.</span>
+      </label>
+      <div id="executionResultBox" class="hidden custom-scrollbar"></div>
+      <div class="form-actions">
+        <button onclick="closeConfirmModal()" class="btn-ghost">Cancel</button>
+        <button onclick="executeActionPlan()" id="btnExecutePlan" class="btn-danger" disabled>Yes, Execute Confirmed Actions</button>
       </div>
     </div>
   </div>
@@ -827,20 +812,13 @@
     }
 
     function formatLogEntry(log) {
-      let badgeClass = 'text-slate-400 bg-slate-900 border-slate-700';
-      if (log.level === 'INFO') badgeClass = 'text-sky-400 bg-sky-950/60 border-sky-800/70';
-      else if (log.level === 'SCAN') badgeClass = 'text-cyan-300 bg-cyan-950/60 border-cyan-800/70';
-      else if (log.level === 'HASH') badgeClass = 'text-purple-300 bg-purple-950/60 border-purple-800/70';
-      else if (log.level === 'WARN') badgeClass = 'text-amber-300 bg-amber-950/60 border-amber-800/70';
-      else if (log.level === 'ERROR') badgeClass = 'text-rose-300 bg-rose-950/60 border-rose-800/70';
-      else if (log.level === 'SUCCESS') badgeClass = 'text-emerald-300 bg-emerald-950/60 border-emerald-800/70 font-bold';
-
+      const level = log.level || 'INFO';
       const div = document.createElement('div');
-      div.className = 'flex items-start gap-2 py-0.5 leading-relaxed hover:bg-slate-900/60 rounded px-1 transition-colors';
+      div.className = 'log-row';
       div.innerHTML = `
-        <span class="text-slate-500 font-mono text-[11px] select-none shrink-0">${log.time}</span>
-        <span class="text-[10px] font-mono font-bold uppercase px-1.5 py-0.2 rounded border ${badgeClass} shrink-0 select-none">${log.level}</span>
-        <span class="text-slate-200 font-mono text-xs break-all flex-1">${escapeHtml(log.message)}</span>
+        <span class="log-time">${log.time}</span>
+        <span class="log-badge log-badge-${level}">${level}</span>
+        <span class="log-msg">${escapeHtml(log.message)}</span>
       `;
       return div;
     }
@@ -937,9 +915,7 @@
       const btn = document.getElementById('btnAutoScroll');
       if (btn) {
         btn.innerText = `Auto-Scroll: ${autoScrollEnabled ? 'ON' : 'OFF'}`;
-        btn.className = autoScrollEnabled
-          ? 'px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 hover:text-white text-[11px] font-mono transition'
-          : 'px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-white text-[11px] font-mono transition';
+        btn.classList.toggle('is-on', autoScrollEnabled);
       }
     }
 
@@ -961,9 +937,9 @@
       try {
         await fetch('/api/logs/clear', { method: 'POST' });
         lastLogId = 0;
-        document.getElementById('consoleLogOutput').innerHTML = '<div class="text-slate-500 italic">Logs cleared. Awaiting new scan events...</div>';
+        document.getElementById('consoleLogOutput').innerHTML = '<div class="muted italic">Logs cleared. Awaiting new scan events...</div>';
         const modalOut = document.getElementById('modalScanTerminal');
-        if (modalOut) modalOut.innerHTML = '<div class="text-slate-500 italic">Logs cleared.</div>';
+        if (modalOut) modalOut.innerHTML = '<div class="muted italic">Logs cleared.</div>';
         const navCount = document.getElementById('navLogCount');
         if (navCount) navCount.innerText = '0';
       } catch (e) {
@@ -1034,12 +1010,12 @@
         const progressBar = document.getElementById('consoleProgressBar');
 
         if (isScanning) {
-          indicator.className = 'inline-block w-2 h-2 rounded-full bg-cyan-400 scanning-pulse';
-          if (navLogDot) navLogDot.className = 'w-2 h-2 rounded-full bg-cyan-400 scanning-pulse';
+          indicator.className = 'status-dot dot-live scanning-pulse';
+          if (navLogDot) navLogDot.className = 'nav-log-dot dot-live scanning-pulse';
           if (progressBar) progressBar.classList.remove('hidden');
 
           if (consoleBadge) {
-            consoleBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 scanning-pulse flex items-center gap-1.5';
+            consoleBadge.className = 'console-badge badge-live scanning-pulse';
             consoleStatusText.innerText = 'Scanning...';
           }
 
@@ -1047,12 +1023,12 @@
           openLogConsole();
           setPollRate(750);
         } else {
-          indicator.className = 'inline-block w-2 h-2 rounded-full bg-emerald-500';
-          if (navLogDot) navLogDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+          indicator.className = 'status-dot dot-idle';
+          if (navLogDot) navLogDot.className = 'nav-log-dot dot-idle';
           if (progressBar) progressBar.classList.add('hidden');
 
           if (consoleBadge) {
-            consoleBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5';
+            consoleBadge.className = 'console-badge badge-idle';
             consoleStatusText.innerText = 'Completed';
           }
 
@@ -1150,10 +1126,9 @@
           const container = document.getElementById('cardsContainer');
           if (container) {
             container.innerHTML = `
-              <div class="p-12 text-center text-slate-500 glass rounded-2xl space-y-3">
-                <div class="text-3xl">🗑️</div>
-                <div class="text-slate-300 font-bold">Report Discarded</div>
-                <div class="text-xs text-slate-500">The Resolution Window has been reset. You can run a new scan or select a saved report from the "Saved Reports" tab.</div>
+              <div class="empty-state">
+                <div class="font-bold">Report Discarded</div>
+                <div>The Resolution Window has been reset. Run a new scan or select a saved report.</div>
               </div>
             `;
           }
@@ -1211,80 +1186,42 @@
         const repContainer = document.getElementById('frontPageReportsContainer');
         if (repContainer) {
           if (reports.length === 0) {
-            repContainer.innerHTML = '<div class="p-8 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-xl text-xs">No saved reports found in ./reports yet. Run a scan to generate your first report.</div>';
+            repContainer.innerHTML = '<div class="empty-state">No saved reports found in ./reports yet. Run a scan to generate your first report.</div>';
           } else {
             repContainer.innerHTML = '';
             reports.forEach(r => {
               const isActive = (r.filename === activeLoaded);
               const card = document.createElement('div');
-              card.className = `p-4 rounded-xl border transition flex flex-col justify-between space-y-3 ${
-                isActive ? 'bg-slate-900/90 border-violet-500/80 shadow-lg shadow-violet-500/10' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
-              }`;
+              card.className = 'report-card' + (isActive ? ' is-active' : '');
               const dateStr = r.created_at || (r.modified ? r.modified.replace('T', ' ').slice(0, 19) : '');
               const sizeKb = (r.size_bytes / 1024).toFixed(1);
 
               card.innerHTML = `
                 <div>
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="text-[10px] font-bold uppercase tracking-wider font-mono ${isActive ? 'text-violet-400 font-extrabold' : 'text-slate-400'}">
-                      ${isActive ? '★ Active in Resolution Window' : 'Saved Report'}
-                    </span>
-                    <span class="text-[10px] text-slate-500 font-mono">${sizeKb} KB</span>
+                  <div class="report-card-top inline-actions" style="justify-content:space-between">
+                    <span class="kicker ${isActive ? 'is-active' : ''}">${isActive ? 'Active in Resolution Window' : 'Saved Report'}</span>
+                    <span class="mono muted">${sizeKb} KB</span>
                   </div>
-                  <h4 class="text-xs font-bold text-slate-100 font-mono mt-1 break-all">${r.filename}</h4>
-
-                  <!-- Job Origin -->
-                  <div class="mt-2 text-xs font-semibold text-cyan-300 flex items-center gap-1.5">
-                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-800/80 text-cyan-400 font-mono uppercase">Job</span>
-                    <span class="truncate" title="${r.job_name || 'Manual Scan'}">${r.job_name || 'Manual Deduplication Scan'}</span>
+                  <h4 class="report-filename">${escapeHtml(r.filename)}</h4>
+                  <div class="job-origin">
+                    <span class="chip">Job</span>
+                    <span class="truncate" title="${escapeHtml(r.job_name || 'Manual Scan')}">${escapeHtml(r.job_name || 'Manual Deduplication Scan')}</span>
                   </div>
-
-                  <!-- Creation Date & Time -->
-                  <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-1 font-mono">
-                    <span class="text-slate-500">📅 Created:</span>
-                    <span>${dateStr}</span>
-                  </div>
-
-                  <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-500/15 text-pink-300 border border-pink-500/30">
-                      ${r.duplicates_count} duplicate groups
-                    </span>
-                    ${r.partials_count > 0 ? `
-                      <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                        ${r.partials_count} partials
-                      </span>
-                    ` : ''}
-                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                      ${r.total_scanned} scanned
-                    </span>
+                  <div class="mono muted">Created: ${escapeHtml(dateStr)}</div>
+                  <div class="chip-row">
+                    <span class="chip chip-rose">${r.duplicates_count} duplicate groups</span>
+                    ${r.partials_count > 0 ? `<span class="chip chip-archive">${r.partials_count} partials</span>` : ''}
+                    <span class="chip">${r.total_scanned} scanned</span>
                   </div>
                 </div>
-
-                <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center gap-1.5 text-xs">
-                  <button onclick="loadSavedReport('${r.filename}')"
-                          class="flex-1 py-1.5 px-2 rounded-lg ${isActive ? 'bg-violet-700 hover:bg-violet-600 text-white font-bold' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'} text-[11px] font-semibold transition text-center">
-                    ${isActive ? '✓ Currently Loaded' : '⚡ Load in Window'}
+                <div class="report-card-actions">
+                  <button onclick="loadSavedReport('${r.filename}')" class="btn btn-sm ${isActive ? 'btn-gold-ghost' : ''}">
+                    ${isActive ? 'Currently Loaded' : 'Load in Window'}
                   </button>
-                  ${r.has_html ? `
-                    <a href="/api/reports/download/${r.html_filename}" target="_blank" title="Open standalone HTML visual report"
-                       class="py-1.5 px-2 rounded-lg bg-sky-950/70 hover:bg-sky-900 border border-sky-800 text-sky-300 text-[11px] font-mono transition">
-                      HTML ↗
-                    </a>
-                  ` : ''}
-                  ${r.has_csv ? `
-                    <a href="/api/reports/download/${r.csv_filename}" download title="Download CSV spreadsheet"
-                       class="py-1.5 px-2 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 text-[11px] font-mono transition">
-                      CSV
-                    </a>
-                  ` : ''}
-                  <a href="/api/reports/download/${r.filename}" download title="Download raw JSON report"
-                     class="py-1.5 px-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 text-[11px] font-mono transition">
-                    JSON
-                  </a>
-                  <button onclick="deleteSavedReport('${r.filename}')" title="Permanently remove this saved report and its associated files"
-                          class="py-1.5 px-2.5 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-800 text-rose-300 hover:text-rose-100 text-[11px] font-mono transition flex items-center gap-1">
-                    <span>🗑️</span>
-                  </button>
+                  ${r.has_html ? `<a href="/api/reports/download/${r.html_filename}" target="_blank" title="Open standalone HTML visual report" class="btn btn-sm">HTML</a>` : ''}
+                  ${r.has_csv ? `<a href="/api/reports/download/${r.csv_filename}" download title="Download CSV spreadsheet" class="btn btn-sm">CSV</a>` : ''}
+                  <a href="/api/reports/download/${r.filename}" download title="Download raw JSON report" class="btn btn-sm">JSON</a>
+                  <button onclick="deleteSavedReport('${r.filename}')" title="Permanently remove this saved report and its associated files" class="btn btn-sm btn-danger-ghost">Delete</button>
                 </div>
               `;
               repContainer.appendChild(card);
@@ -1296,38 +1233,29 @@
         const histContainer = document.getElementById('frontPageRunHistoryContainer');
         if (histContainer) {
           if (history.length === 0) {
-            histContainer.innerHTML = '<div class="p-4 text-center text-slate-500 bg-slate-900/50 rounded-xl text-xs">No scan runs recorded in history yet.</div>';
+            histContainer.innerHTML = '<div class="empty-state">No scan runs recorded in history yet.</div>';
           } else {
             histContainer.innerHTML = '';
             history.forEach(run => {
               const item = document.createElement('div');
-              item.className = 'p-3 rounded-xl bg-slate-900/70 border border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs hover:border-slate-700 transition';
-              const targetColor = String(run.target).toLowerCase().includes('manga') ? 'text-violet-400 border-violet-500/30 bg-violet-500/10' : 'text-pink-400 border-pink-500/30 bg-pink-500/10';
+              item.className = 'history-row';
               const jobDisplayName = run.job_name || (run.target + ' Scan');
               item.innerHTML = `
-                <div class="flex items-center gap-3">
-                  <span class="w-2 h-2 rounded-full ${run.status === 'completed' ? 'bg-emerald-400' : 'bg-cyan-400 scanning-pulse'}"></span>
+                <div class="history-main">
+                  <span class="dot ${run.status === 'completed' ? 'is-done' : 'scanning-pulse'}"></span>
                   <div>
-                    <div class="flex items-center gap-2">
-                      <span class="font-bold text-slate-200 capitalize">${jobDisplayName}</span>
-                      <span class="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded border ${targetColor}">${run.mode}</span>
-                      <span class="text-[11px] text-slate-500 font-mono">${run.timestamp}</span>
+                    <div class="inline-actions">
+                      <strong>${escapeHtml(jobDisplayName)}</strong>
+                      <span class="chip">${escapeHtml(run.mode || '')}</span>
+                      <span class="mono muted">${escapeHtml(run.timestamp || '')}</span>
                     </div>
-                    <div class="text-[11px] text-slate-400 mt-0.5">
-                      Scanned <strong>${run.total_scanned}</strong> items • Found <strong>${run.duplicates_count}</strong> duplicate groups ${run.partials_count > 0 ? `• <strong>${run.partials_count}</strong> partials` : ''} • Runtime: ${run.duration_seconds}s
-                    </div>
+                    <div class="hint">Scanned ${run.total_scanned} items · ${run.duplicates_count} duplicate groups${run.partials_count > 0 ? ` · ${run.partials_count} partials` : ''} · ${run.duration_seconds}s</div>
                   </div>
                 </div>
-                <div class="flex items-center gap-2">
-                  ${run.report_file ? `
-                    <button onclick="loadSavedReport('${run.report_file}')"
-                            class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-semibold transition">
-                      Load Report
-                    </button>
-                  ` : ''}
-                </div>
+                ${run.report_file ? `<button onclick="loadSavedReport('${run.report_file}')" class="btn btn-sm">Load Report</button>` : ''}
               `;
               histContainer.appendChild(item);
+
             });
           }
         }
@@ -1357,118 +1285,67 @@
         if (!container) return;
 
         if (savedJobsData.length === 0) {
-          container.innerHTML = `
-            <div class="p-12 text-center text-slate-500 col-span-full bg-slate-900/50 rounded-2xl text-xs space-y-2">
-              <div class="text-3xl">🎯</div>
-              <div class="text-slate-300 font-bold">No Scan Jobs Defined Yet</div>
-              <div>Use the form above to create your first reusable scan job with multiple paths and custom settings.</div>
-            </div>
-          `;
+          container.innerHTML = '<div class="empty-state"><div class="font-bold">No Scan Jobs Defined Yet</div><div>Use the form above to create a reusable scan job.</div></div>';
           return;
         }
 
         container.innerHTML = '';
         savedJobsData.forEach(job => {
           const card = document.createElement('div');
-          card.className = 'p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between space-y-4 shadow-lg';
+          card.className = 'job-card';
 
           const isManga = String(job.target_type).toLowerCase().includes('manga');
           const isDoujin = String(job.target_type).toLowerCase().includes('doujin');
-          const typeBadgeClass = isManga
-            ? 'bg-violet-500/15 text-violet-300 border-violet-500/30'
-            : (isDoujin ? 'bg-pink-500/15 text-pink-300 border-pink-500/30' : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30');
-
-          const targetTitle = isManga ? '📚 Manga / Manhwa' : (isDoujin ? '🌸 Doujinshi' : '⚡ Both Libraries');
-          const modeTitle = (job.mode === 'image') ? '👁️ Visual Hashing' : '⚡ Metadata (Fast)';
+          const targetTitle = isManga ? 'Manga / Manhwa' : (isDoujin ? 'Doujinshi' : 'Both Libraries');
+          const modeTitle = (job.mode === 'image') ? 'Visual Hashing' : 'Metadata (Fast)';
 
           const pathsListHtml = (job.paths || []).map(p => `
-            <div class="flex items-center gap-1.5 text-xs font-mono text-slate-300 bg-slate-950 px-2.5 py-1 rounded border border-slate-800/80 truncate">
-              <span class="text-cyan-400">📁</span>
-              <span class="truncate" title="${p}">${p}</span>
-            </div>
+            <div class="path-line truncate" title="${escapeHtml(p)}">${escapeHtml(p)}</div>
           `).join('');
 
-          let statusBadge = '<span class="text-[10px] text-slate-500 font-mono">Never executed</span>';
+          let statusBadge = '<span class="hint">Never executed</span>';
           if (job.last_status === 'running') {
-            statusBadge = '<span class="text-[10px] text-cyan-400 font-bold scanning-pulse flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> Running now...</span>';
+            statusBadge = '<span class="text-gold scanning-pulse">Running now...</span>';
           } else if (job.last_status === 'completed') {
-            statusBadge = `<span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">✓ Completed (${job.last_duplicates_count || 0} dupes found)</span>`;
+            statusBadge = `<span class="text-keep">Completed (${job.last_duplicates_count || 0} dupes found)</span>`;
           } else if (job.last_status === 'failed') {
-            statusBadge = '<span class="text-[10px] text-rose-400 font-mono">✗ Last run failed</span>';
+            statusBadge = '<span class="text-delete">Last run failed</span>';
           }
 
           card.innerHTML = `
-            <div class="space-y-3">
-              <div class="flex items-start justify-between gap-2">
-                <div>
-                  <div class="flex flex-wrap items-center gap-1.5">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${typeBadgeClass}">
-                      ${targetTitle}
-                    </span>
-                    <span class="px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700 bg-slate-950 text-slate-400">
-                      ${modeTitle}
-                    </span>
-                    ${(job.excluded_manga && job.excluded_manga.length > 0) ? `
-                      <span class="px-2 py-0.5 rounded text-[10px] font-mono border border-amber-500/40 bg-amber-950/40 text-amber-300" title="Excluded: ${escapeHtml(job.excluded_manga.join(', '))}">
-                        🚫 ${job.excluded_manga.length} Excluded
-                      </span>
-                    ` : ''}
-                  </div>
-                  <h4 class="text-sm font-extrabold text-slate-100 mt-2">${escapeHtml(job.name)}</h4>
-                  ${job.description ? `<p class="text-xs text-slate-400 mt-0.5">${escapeHtml(job.description)}</p>` : ''}
+            <div>
+              <div class="inline-actions" style="justify-content:space-between">
+                <div class="chip-row">
+                  <span class="chip ${isManga ? 'chip-gold' : (isDoujin ? 'chip-rose' : '')}">${targetTitle}</span>
+                  <span class="chip">${modeTitle}</span>
+                  ${(job.excluded_manga && job.excluded_manga.length > 0) ? `<span class="chip chip-archive" title="Excluded: ${escapeHtml(job.excluded_manga.join(', '))}">${job.excluded_manga.length} Excluded</span>` : ''}
                 </div>
-                <div class="flex items-center gap-1">
-                  <button onclick="editScanJob('${job.id}')" title="Edit this job"
-                          class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition">
-                    ✏️
-                  </button>
-                  <button onclick="deleteScanJob('${job.id}')" title="Delete this job"
-                          class="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 text-xs transition">
-                    🗑️
-                  </button>
+                <div class="inline-actions">
+                  <button onclick="editScanJob('${job.id}')" title="Edit this job" class="btn btn-sm">Edit</button>
+                  <button onclick="deleteScanJob('${job.id}')" title="Delete this job" class="btn btn-sm btn-danger-ghost">Delete</button>
                 </div>
               </div>
-
-              <!-- Locations (can be multiple) -->
-              <div class="space-y-1">
-                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Locations (${job.paths ? job.paths.length : 0}):</span>
-                <div class="space-y-1 max-h-24 overflow-y-auto custom-scrollbar">
-                  ${pathsListHtml || '<div class="text-xs text-slate-500 italic">No paths configured.</div>'}
-                </div>
-              </div>
-
-              <!-- Excluded Manga (if configured) -->
+              <h4>${escapeHtml(job.name)}</h4>
+              ${job.description ? `<p class="hint">${escapeHtml(job.description)}</p>` : ''}
+              <div class="hint" style="margin-top:8px">Locations (${job.paths ? job.paths.length : 0})</div>
+              <div class="path-list">${pathsListHtml || '<div class="hint">No paths configured.</div>'}</div>
               ${(job.excluded_manga && job.excluded_manga.length > 0) ? `
-                <div class="space-y-1">
-                  <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Manga Exclusions (${job.excluded_manga.length}):</span>
-                  <div class="flex flex-wrap gap-1 max-h-16 overflow-y-auto custom-scrollbar">
-                    ${job.excluded_manga.map(ex => `<span class="px-2 py-0.5 rounded text-[10px] bg-slate-950 border border-amber-800/60 text-amber-300 font-mono">${escapeHtml(ex)}</span>`).join('')}
-                  </div>
+                <div class="chip-row" style="margin-top:8px">
+                  ${job.excluded_manga.map(ex => `<span class="chip">${escapeHtml(ex)}</span>`).join('')}
                 </div>
               ` : ''}
-
-              <!-- Status & Run Info -->
-              <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <div class="inline-actions" style="justify-content:space-between;margin-top:8px">
                 <div>${statusBadge}</div>
-                <div class="font-mono text-[10px] text-slate-500">${job.last_run ? `Last run: ${job.last_run}` : `Created: ${job.created_at || ''}`}</div>
+                <div class="mono muted">${job.last_run ? `Last run: ${escapeHtml(job.last_run)}` : `Created: ${escapeHtml(job.created_at || '')}`}</div>
               </div>
             </div>
-
-            <!-- Execute Button -->
-            <div class="pt-2 border-t border-slate-800 flex items-center gap-2">
-              <button onclick="executeScanJob('${job.id}')"
-                      class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-xs text-white shadow-md shadow-cyan-600/30 flex items-center justify-center gap-2 transition">
-                <span>▶️ Run Job Now</span>
-              </button>
-              ${job.last_report_file ? `
-                <button onclick="loadSavedReport('${job.last_report_file}')" title="Open last report in Resolution Window"
-                        class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition whitespace-nowrap">
-                  Open Report
-                </button>
-              ` : ''}
+            <div class="inline-actions">
+              <button onclick="executeScanJob('${job.id}')" class="btn btn-gold-ghost">Run Job Now</button>
+              ${job.last_report_file ? `<button onclick="loadSavedReport('${job.last_report_file}')" title="Open last report in Resolution Window" class="btn btn-sm">Open Report</button>` : ''}
             </div>
           `;
           container.appendChild(card);
+
         });
       } catch (err) {
         console.error('Failed to load scan jobs:', err);
@@ -1602,7 +1479,7 @@
           }
           isLogConsoleOpen = true;
           const btnToggle = document.getElementById('btnToggleLogs');
-          if (btnToggle) btnToggle.classList.add('bg-cyan-600/30', 'text-cyan-200');
+          if (btnToggle) btnToggle.classList.add('is-live');
 
           // Trigger poll rate acceleration
           setPollRate(750);
@@ -1643,15 +1520,10 @@
       }
       activeTab = tab;
 
-      document.querySelectorAll('.tab-btn').forEach(b => {
-        b.classList.remove('bg-violet-600', 'text-white');
-        b.classList.add('bg-slate-900', 'text-slate-300');
-      });
+      if (typeof closeSidebar === 'function') closeSidebar();
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('is-active'));
       const activeBtn = document.getElementById(`tab-${tab}`);
-      if (activeBtn) {
-        activeBtn.classList.remove('bg-slate-900', 'text-slate-300');
-        activeBtn.classList.add('bg-violet-600', 'text-white');
-      }
+      if (activeBtn) activeBtn.classList.add('is-active');
 
       const samplesView = document.getElementById('samplesView');
       const jobsView = document.getElementById('jobsView');
@@ -1701,11 +1573,7 @@
       filters.forEach(f => {
         const btn = document.getElementById(`subfilter-${f}`);
         if (!btn) return;
-        if (reportSubFilter === f) {
-          btn.className = 'subfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-violet-600 text-white flex items-center gap-1.5 transition shadow-sm';
-        } else {
-          btn.className = 'subfilter-btn px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 flex items-center gap-1.5 transition';
-        }
+        btn.className = 'filter-tab subfilter-btn' + (reportSubFilter === f ? ' is-active' : '');
       });
     }
 
@@ -1740,6 +1608,31 @@
       }
     }
 
+    function humanizeReason(code) {
+      if (!code) return '';
+      return String(code).replace(/[_-]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+    }
+
+    function splitVisualVerification(text) {
+      const raw = text || '';
+      const match = raw.match(/\[Visual Verification:\s*([^\]]+)\]/i);
+      if (!match) return { text: raw, pill: '' };
+      const detail = match[1].trim();
+      const ham = detail.match(/hamming distance:\s*(\d+)/i);
+      const pill = ham ? ('Visual Match · Hamming ' + ham[1]) : detail;
+      const stripped = raw.replace(match[0], '').replace(/\s{2,}/g, ' ').trim();
+      return { text: stripped || detail, pill: pill };
+    }
+
+    function copyCandidatePath(btn) {
+      const path = btn.getAttribute('data-path') || '';
+      if (!path || !navigator.clipboard) return;
+      navigator.clipboard.writeText(path).then(function () {
+        btn.classList.add('is-copied');
+        setTimeout(function () { btn.classList.remove('is-copied'); }, 1200);
+      });
+    }
+
     function renderActiveView() {
       const container = document.getElementById('cardsContainer');
       if (!container) return;
@@ -1752,18 +1645,18 @@
       if (reportSubFilter === 'partials') {
         const filtered = partialsData.filter(p => !query || (p.series_name || '').toLowerCase().includes(query) || (p.description || '').toLowerCase().includes(query));
         if (filtered.length === 0) {
-          container.innerHTML = '<div class="p-12 text-center text-slate-500 glass rounded-2xl">No partial chapter issues match filter.</div>';
+          container.innerHTML = '<div class="empty-state">No partial chapter issues match filter.</div>';
           return;
         }
         filtered.forEach(p => {
           const card = document.createElement('div');
-          card.className = 'glass p-5 rounded-2xl border-l-4 border-l-amber-500 space-y-2';
+          card.className = 'group-card partial-card';
           card.innerHTML = `
-            <div class="flex items-center justify-between">
-              <h3 class="text-base font-bold text-slate-100">${escapeHtml(p.series_name)}</h3>
-              <span class="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">${escapeHtml(p.issue_type)}</span>
+            <div class="group-head">
+              <h3 class="group-title">${escapeHtml(p.series_name)}</h3>
+              <span class="chip chip-archive">${escapeHtml(p.issue_type)}</span>
             </div>
-            <p class="text-xs text-slate-300">${escapeHtml(p.description)}</p>
+            <p class="recommend">${escapeHtml(p.description)}</p>
           `;
           container.appendChild(card);
         });
@@ -1783,19 +1676,21 @@
       });
 
       if (filteredGroups.length === 0) {
-        container.innerHTML = `<div class="p-12 text-center text-slate-500 glass rounded-2xl">No ${reportSubFilter === 'all' ? '' : reportSubFilter + ' '}duplicates found in current report. Click <strong>"🚀 Run Scan"</strong> or choose a report from <strong>"📂 Saved Reports"</strong>.</div>`;
+        container.innerHTML = `<div class="empty-state">No ${reportSubFilter === 'all' ? '' : reportSubFilter + ' '}duplicates found in the current report. Run a scan or open a saved report.</div>`;
         return;
       }
 
       filteredGroups.forEach((g, gIdx) => {
         const card = document.createElement('div');
-        card.className = 'glass p-5 rounded-2xl space-y-4';
+        card.className = 'group-card';
 
-        // Check if all items in this group are set to 'keep'
         const allKeptInGroup = g.items.every(it => {
           const path = it.file_path || it.raw_name || it.work_name;
           return selectedActions[path] === 'keep';
         });
+
+        const visual = splitVisualVerification(g.recommendation || '');
+        const reasonLabel = humanizeReason(g.category || '');
 
         let itemsHtml = g.items.map(it => {
           const name = it.raw_name || it.work_name || '';
@@ -1807,71 +1702,63 @@
             selectedActions[path] = isKeeper ? 'keep' : 'move_archive';
           }
           const curAction = selectedActions[path];
+          const edge = curAction === 'keep' ? 'action-keep' : (curAction === 'delete' ? 'action-delete' : 'action-archive');
 
-          // Use safe numeric indexing in itemRegistry to prevent ANY apostrophe/quote syntax error
           let itemIdx = itemRegistry.indexOf(path);
           if (itemIdx === -1) {
             itemIdx = itemRegistry.length;
             itemRegistry.push(path);
           }
 
+          const badges = [
+            isKeeper ? '<span class="chip chip-gold">Best Match</span>' : '',
+            it.is_hq ? '<span class="chip">HQ</span>' : '',
+            it.is_fixed ? '<span class="chip">Fixed</span>' : '',
+            it.is_decensored ? '<span class="chip">Decensored</span>' : '',
+            it.is_digital ? '<span class="chip">Digital</span>' : ''
+          ].filter(Boolean).join('');
+
           return `
-            <div class="flex flex-col md:flex-row md:items-center justify-between p-3.5 rounded-xl border ${curAction === 'keep' ? 'bg-emerald-950/20 border-emerald-800/50' : curAction === 'delete' ? 'bg-rose-950/20 border-rose-800/50' : 'bg-amber-950/20 border-amber-800/50'} text-xs gap-3">
-              <div class="space-y-1 min-w-0 flex-1">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="font-bold text-slate-200 text-sm">${escapeHtml(name)}</span>
-                  ${isKeeper ? '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] border border-emerald-500/30">RECOMMENDED BEST</span>' : ''}
-                  ${it.is_hq ? '<span class="px-1.5 py-0.2 rounded bg-violet-900/50 text-violet-300 font-semibold text-[10px]">HQ</span>' : ''}
-                  ${it.is_fixed ? '<span class="px-1.5 py-0.2 rounded bg-cyan-900/50 text-cyan-300 font-semibold text-[10px]">FIXED</span>' : ''}
-                  ${it.is_decensored ? '<span class="px-1.5 py-0.2 rounded bg-pink-900/50 text-pink-300 font-semibold text-[10px]">DECENSORED</span>' : ''}
-                  ${it.is_digital ? '<span class="px-1.5 py-0.2 rounded bg-blue-900/50 text-blue-300 font-semibold text-[10px]">DIGITAL</span>' : ''}
+            <div class="candidate-row ${edge}">
+              <div style="min-width:0;flex:1">
+                <div class="inline-actions">
+                  <span class="file-name">${escapeHtml(name)}</span>
+                  ${badges}
                 </div>
-                <div class="text-slate-400 font-mono text-[11px] truncate" title="${escapeHtml(path)}">${escapeHtml(path)}</div>
-                <div class="flex items-center gap-3 text-slate-400 text-[11px] pt-0.5">
-                  <span>Group: <strong class="text-slate-300">${escapeHtml(group)}</strong></span>
-                  ${it.page_count ? `<span>Pages: <strong class="text-slate-300">${it.page_count}</strong></span>` : ''}
-                  ${it.volume_root ? `<span>Volume: <strong class="text-slate-300">${escapeHtml(it.volume_root)}</strong></span>` : ''}
+                <div class="meta-line">
+                  <span>Group: <strong>${escapeHtml(group)}</strong></span>
+                  ${it.page_count ? `<span>Pages: <strong>${it.page_count}</strong></span>` : ''}
+                  ${it.volume_root ? `<span>Vol: <strong>${escapeHtml(it.volume_root)}</strong></span>` : ''}
+                </div>
+                <div class="path-row">
+                  <span class="path-text" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
+                  <button type="button" class="btn-copy" data-path="${escapeHtml(path)}" onclick="copyCandidatePath(this)" title="Copy path">Copy</button>
                 </div>
               </div>
-
-              <!-- Action Selector Buttons (Safe Numeric Index: Immune to quotes/apostrophes) -->
-              <div class="flex items-center gap-1.5 shrink-0">
-                <button onclick="setItemActionByIndex(${itemIdx}, 'keep')"
-                        class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'keep' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
-                  Keep
-                </button>
-                <button onclick="setItemActionByIndex(${itemIdx}, 'move_archive')"
-                        class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'move_archive' ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
-                  Archive
-                </button>
-                <button onclick="setItemActionByIndex(${itemIdx}, 'delete')"
-                        class="px-3 py-1.5 rounded-lg font-bold text-xs transition ${curAction === 'delete' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">
-                  Delete
-                </button>
+              <div class="seg">
+                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'keep')" class="${curAction === 'keep' ? 'is-keep' : ''}">Keep</button>
+                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'move_archive')" class="${curAction === 'move_archive' ? 'is-archive' : ''}">Archive</button>
+                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'delete')" class="${curAction === 'delete' ? 'is-delete' : ''}">Delete</button>
               </div>
             </div>
           `;
         }).join('');
 
+        const typeClass = g.target_type === 'manga' ? 'chip-gold' : 'chip-rose';
         card.innerHTML = `
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div class="group-head">
             <div>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded tracking-wider ${g.target_type === 'manga' ? 'bg-violet-900/60 text-violet-300 border border-violet-700' : 'bg-pink-900/60 text-pink-300 border border-pink-700'}">${escapeHtml(g.target_type.toUpperCase())}</span>
-              <h3 class="text-base font-bold text-slate-100 inline-block ml-2">${escapeHtml(g.title)} <span class="text-slate-400 font-normal">(${escapeHtml(g.sub_title)})</span></h3>
+              <span class="chip ${typeClass}">${escapeHtml((g.target_type || '').toUpperCase())}</span>
+              <h3 class="group-title">${escapeHtml(g.title)} <span class="chapter">· ${escapeHtml(g.sub_title)}</span></h3>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">${escapeHtml(g.category)}</span>
-              <button onclick="keepGroupDuplicates(${gIdx})" title="Keep both copies for this group"
-                      class="px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${allKeptInGroup ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'}">
-                <span>🛡️ Keep Both</span>
-              </button>
+            <div class="group-head-right">
+              ${reasonLabel ? `<span class="chip">${escapeHtml(reasonLabel)}</span>` : ''}
+              ${visual.pill ? `<span class="chip chip-gold">${escapeHtml(visual.pill)}</span>` : ''}
+              <button type="button" onclick="keepGroupDuplicates(${gIdx})" title="Keep both copies for this group" class="btn btn-sm ${allKeptInGroup ? 'btn-keep is-on' : 'btn-ghost'}">Keep Both</button>
             </div>
           </div>
-          <p class="text-xs text-slate-300 bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60 flex items-center gap-1.5">
-            <span class="text-cyan-400 font-bold">ℹ️ Recommendation:</span>
-            <span>${escapeHtml(g.recommendation)}</span>
-          </p>
-          <div class="space-y-2">${itemsHtml}</div>
+          <p class="recommend">${escapeHtml(visual.text)}</p>
+          <div>${itemsHtml}</div>
         `;
         container.appendChild(card);
       });
@@ -1907,6 +1794,8 @@
       const deleteCount = Object.values(selectedActions).filter(a => a === 'delete').length;
       const totalPending = moveCount + deleteCount;
       document.getElementById('actionBadge').innerText = totalPending;
+      const reviewBtn = document.getElementById('btnReviewActions');
+      if (reviewBtn) reviewBtn.classList.toggle('is-idle', totalPending === 0);
     }
 
     // =========================================================================
@@ -1964,7 +1853,7 @@
       // Reveal live console on front page and inside modal
       openLogConsole();
       if (modalLogContainer) modalLogContainer.classList.remove('hidden');
-      if (modalTerminal) modalTerminal.innerHTML = '<div class="text-cyan-400 font-mono">🚀 Initiating scan job...</div>';
+      if (modalTerminal) modalTerminal.innerHTML = '<div class="text-gold font-mono">🚀 Initiating scan job...</div>';
 
       if (btnStart) {
         btnStart.disabled = true;
@@ -1987,19 +1876,19 @@
         const data = await res.json();
         if (res.ok) {
           isScanning = true;
-          statusBox.innerHTML = `<span class="text-emerald-400 font-bold">✓ Scan started!</span> Streaming live execution output below:`;
+          statusBox.innerHTML = `<span class="text-keep font-bold">✓ Scan started!</span> Streaming live execution output below:`;
           setPollRate(750);
           await fetchLogs();
           switchTab('report');
         } else {
-          statusBox.innerHTML = `<span class="text-rose-400 font-bold">Error:</span> ${data.error || 'Failed to start scan'}`;
+          statusBox.innerHTML = `<span class="text-delete font-bold">Error:</span> ${data.error || 'Failed to start scan'}`;
           if (btnStart) {
             btnStart.disabled = false;
             btnStart.innerHTML = '<span>▶️ Generate Report</span>';
           }
         }
       } catch (e) {
-        statusBox.innerHTML = `<span class="text-rose-400 font-bold">Error:</span> ${e}`;
+        statusBox.innerHTML = `<span class="text-delete font-bold">Error:</span> ${e}`;
         if (btnStart) {
           btnStart.disabled = false;
           btnStart.innerHTML = '<span>▶️ Generate Report</span>';
@@ -2065,13 +1954,11 @@
       const yamlText = document.getElementById('composeCodeBlock').innerText;
       navigator.clipboard.writeText(yamlText).then(() => {
         const btn = document.getElementById('btnCopyCompose');
-        btn.innerText = '✓ Copied to Clipboard!';
-        btn.classList.remove('bg-violet-600');
-        btn.classList.add('bg-emerald-600');
+        btn.innerText = 'Copied to Clipboard';
+        btn.classList.add('is-copied');
         setTimeout(() => {
-          btn.innerText = '📋 Copy Compose YAML';
-          btn.classList.remove('bg-emerald-600');
-          btn.classList.add('bg-violet-600');
+          btn.innerText = 'Copy Compose YAML';
+          btn.classList.remove('is-copied');
         }, 2500);
       });
     }
@@ -2102,15 +1989,15 @@
 
       const listContainer = document.getElementById('impactedFilesList');
       if (impactedItems.length === 0) {
-        listContainer.innerHTML = '<div class="text-slate-500 italic p-2">No files marked for archive or deletion. All files are set to Keep (untouched).</div>';
+        listContainer.innerHTML = '<div class="muted italic">No files marked for archive or deletion. All files are set to Keep.</div>';
       } else {
         listContainer.innerHTML = '';
         impactedItems.forEach(it => {
           const div = document.createElement('div');
-          div.className = 'flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800 gap-2';
+          div.className = 'impact-row';
           div.innerHTML = `
-            <span class="truncate flex-1 text-slate-300" title="${it.path}">${it.path}</span>
-            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${it.action === 'DELETE' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}">${it.action}</span>
+            <span class="truncate" title="${escapeHtml(it.path)}">${escapeHtml(it.path)}</span>
+            <span class="chip ${it.action === 'DELETE' ? 'chip-rose' : 'chip-archive'}">${it.action}</span>
           `;
           listContainer.appendChild(div);
         });
@@ -2132,15 +2019,8 @@
     function toggleExecuteButtonState() {
       const isChecked = document.getElementById('mandatoryConfirmCheckbox').checked;
       const btn = document.getElementById('btnExecutePlan');
-      if (isChecked) {
-        btn.disabled = false;
-        btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-rose-700');
-        btn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'cursor-pointer', 'shadow-lg', 'shadow-rose-600/30');
-      } else {
-        btn.disabled = true;
-        btn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-rose-700');
-        btn.classList.remove('bg-rose-600', 'hover:bg-rose-500', 'cursor-pointer', 'shadow-lg', 'shadow-rose-600/30');
-      }
+      btn.disabled = !isChecked;
+      btn.classList.toggle('is-ready', isChecked);
     }
 
     async function executeActionPlan() {
@@ -2160,7 +2040,7 @@
 
       const resBox = document.getElementById('executionResultBox');
       resBox.classList.remove('hidden');
-      resBox.innerHTML = '<div class="text-slate-400">Executing action plan...</div>';
+      resBox.innerHTML = '<div class="muted">Executing action plan...</div>';
 
       try {
         const res = await fetch('/api/actions/execute', {
@@ -2173,22 +2053,22 @@
           })
         });
         const result = await res.json();
-        let logHtml = `<div class="${dryRun ? 'text-cyan-400' : 'text-emerald-400'} font-bold">Execution Finished (${dryRun ? 'DRY RUN' : 'PHYSICAL RUN'}): Kept ${result.kept}, Moved ${result.moved}, Deleted ${result.deleted}</div>`;
+        let logHtml = `<div class="${dryRun ? 'text-gold' : 'text-keep'} font-bold">Execution Finished (${dryRun ? 'DRY RUN' : 'PHYSICAL RUN'}): Kept ${result.kept}, Moved ${result.moved}, Deleted ${result.deleted}</div>`;
         if (result.errors && result.errors.length > 0) {
-          logHtml += `<div class="text-rose-400 font-bold mt-1">Errors encountered:</div>`;
+          logHtml += `<div class="text-delete font-bold mt-1">Errors encountered:</div>`;
           result.errors.forEach(err => {
             logHtml += `<div class="text-rose-300">• ${err}</div>`;
           });
         }
         if (result.action_log && result.action_log.length > 0) {
-          logHtml += `<div class="text-slate-400 mt-2 font-bold">Action Log:</div>`;
+          logHtml += `<div class="muted mt-2 font-bold">Action Log:</div>`;
           result.action_log.slice(0, 15).forEach(entry => {
             logHtml += `<div class="text-slate-300">• [${entry.action}] ${entry.source} -> ${entry.destination || 'retained'}</div>`;
           });
         }
         resBox.innerHTML = logHtml;
       } catch (e) {
-        resBox.innerHTML = `<div class="text-rose-400 font-bold">Execution request failed: ${e}</div>`;
+        resBox.innerHTML = `<div class="text-delete font-bold">Execution request failed: ${e}</div>`;
       }
     }
 
@@ -2213,6 +2093,31 @@
       }
     }
 
+
+    function toggleExportMenu(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('exportMenu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+    function closeExportMenu() {
+      const menu = document.getElementById('exportMenu');
+      if (menu) menu.classList.add('hidden');
+    }
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('exportWrap');
+      if (wrap && !wrap.contains(e.target)) closeExportMenu();
+    });
+    function toggleSidebar() {
+      document.getElementById('appSidebar').classList.toggle('is-open');
+      document.getElementById('sidebarBackdrop').classList.toggle('is-open');
+    }
+    function closeSidebar() {
+      const sidebar = document.getElementById('appSidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      if (sidebar) sidebar.classList.remove('is-open');
+      if (backdrop) backdrop.classList.remove('is-open');
+    }
+
     document.getElementById('searchInput').addEventListener('input', renderActiveView);
 
     // Initial polling & setup
@@ -2222,6 +2127,7 @@
     loadScanJobs();
     switchTab('report');
     setPollRate(3500);
+  
   </script>
 </body>
 </html>
