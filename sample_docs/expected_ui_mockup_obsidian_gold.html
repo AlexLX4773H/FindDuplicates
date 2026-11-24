@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FindDuplicates — Obsidian &amp; Gold Redesign Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* Obsidian Surfaces */
+      --bg-canvas: #050505;
+      --bg-sidebar: #0A0A0C;
+      --bg-surface: #0E0E11;
+      --bg-surface-elevated: #15151A;
+      --bg-surface-subtle: #1C1C22;
+
+      /* Borders */
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-default: rgba(255, 255, 255, 0.12);
+      --border-gold-subtle: rgba(212, 175, 55, 0.25);
+      --border-gold-strong: rgba(212, 175, 55, 0.55);
+
+      /* Gold Accents */
+      --gold-primary: #D4AF37;
+      --gold-bright: #EED278;
+      --gold-muted: #9E8028;
+      --gold-tint: rgba(212, 175, 55, 0.10);
+      --gold-tint-strong: rgba(212, 175, 55, 0.16);
+      --gold-glow: rgba(212, 175, 55, 0.18);
+
+      /* Text */
+      --text-primary: #F4F4F6;
+      --text-secondary: #A1A1AA;
+      --text-muted: #666670;
+      --text-on-gold: #090805;
+
+      /* Semantic Statuses */
+      --status-keep: #34D399;
+      --status-keep-bg: rgba(52, 211, 153, 0.11);
+      --status-keep-border: rgba(52, 211, 153, 0.36);
+
+      --status-archive: #E5A93C;
+      --status-archive-bg: rgba(229, 169, 60, 0.12);
+      --status-archive-border: rgba(229, 169, 60, 0.42);
+
+      --status-delete: #F87171;
+      --status-delete-bg: rgba(248, 113, 113, 0.11);
+      --status-delete-border: rgba(248, 113, 113, 0.40);
+
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Subtle gold ambient glow at top of canvas */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -180px;
+      left: 50%;
+      transform: translateX(-35%);
+      width: 900px;
+      height: 320px;
+      background: radial-gradient(ellipse at center, rgba(212, 175, 55, 0.065) 0%, rgba(5, 5, 5, 0) 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app-shell {
+      display: flex;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ==================== SIDEBAR ==================== */
+    .sidebar {
+      width: 256px;
+      flex-shrink: 0;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      padding: 18px 14px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 4px 8px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 16px;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(145deg, rgba(212, 175, 55, 0.22), rgba(212, 175, 55, 0.04));
+      border: 1px solid var(--border-gold-subtle);
+      display: grid;
+      place-items: center;
+      color: var(--gold-bright);
+      flex-shrink: 0;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .brand-text h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .brand-text span {
+      font-size: 11px;
+      color: var(--gold-primary);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* Unified Scan Trigger */
+    .scan-split {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+
+    .btn-quick-scan {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: var(--gold-tint);
+      border: 1px solid var(--border-gold-subtle);
+      color: var(--gold-bright);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-quick-scan:hover {
+      background: var(--gold-tint-strong);
+      border-color: var(--border-gold-strong);
+      box-shadow: 0 0 16px rgba(212, 175, 55, 0.14);
+    }
+
+    .btn-custom-scan {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-custom-scan:hover {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-default);
+      color: var(--text-primary);
+    }
+
+    .nav-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 0 10px 8px;
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-bottom: 20px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      position: relative;
+      background: transparent;
+      width: 100%;
+      font-family: inherit;
+    }
+
+    .nav-item-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--gold-tint);
+      border-color: var(--border-gold-subtle);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: -1px;
+      top: 7px;
+      bottom: 7px;
+      width: 2.5px;
+      border-radius: 2px;
+      background: var(--gold-primary);
+    }
+
+    .nav-item.active svg {
+      color: var(--gold-bright);
+    }
+
+    .nav-count {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      padding: 1px 6px;
+      border-radius: 5px;
+      background: var(--bg-surface-subtle);
+      color: var(--text-secondary);
+    }
+
+    .nav-item.active .nav-count {
+      background: rgba(212, 175, 55, 0.20);
+      color: var(--gold-bright);
+    }
+
+    /* Compact Telemetry Box */
+    .telemetry-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 12px 10px;
+      margin-bottom: 20px;
+    }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      text-align: center;
+    }
+
+    .telemetry-cell {
+      padding: 2px 4px;
+      position: relative;
+    }
+
+    .telemetry-cell:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      right: -2px;
+      top: 4px;
+      bottom: 4px;
+      width: 1px;
+      background: var(--border-subtle);
+    }
+
+    .telemetry-val {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+      display: block;
+    }
+
+    .telemetry-val.gold {
+      color: var(--gold-bright);
+    }
+
+    .telemetry-lbl {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* Sidebar Footer */
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--status-keep);
+      box-shadow: 0 0 8px var(--status-keep);
+    }
+
+    .safe-mode-pill {
+      margin-top: 10px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: rgba(212, 175, 55, 0.05);
+      border: 1px solid rgba(212, 175, 55, 0.16);
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      cursor: help;
+      position: relative;
+    }
+
+    .safe-mode-pill svg {
+      color: var(--gold-primary);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .safe-mode-text strong {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--gold-bright);
+      letter-spacing: 0.02em;
+    }
+
+    .safe-mode-text span {
+      display: block;
+      font-size: 10.5px;
+      color: var(--text-muted);
+      line-height: 1.35;
+      margin-top: 2px;
+    }
+
+    /* ==================== MAIN CONTENT ==================== */
+    .main-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    /* Sticky Topbar */
+    .topbar {
+      height: 62px;
+      padding: 0 28px;
+      background: rgba(5, 5, 5, 0.86);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .report-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-primary);
+      max-width: 380px;
+    }
+
+    .report-pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gold-primary);
+      flex-shrink: 0;
+    }
+
+    .report-pill span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Export Dropdown */
+    .dropdown-wrap {
+      position: relative;
+    }
+
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 11px;
+      border-radius: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-ghost:hover {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-default);
+      color: var(--text-primary);
+    }
+
+    .btn-icon-danger {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-icon-danger:hover {
+      background: var(--status-delete-bg);
+      border-color: var(--status-delete-border);
+      color: var(--status-delete);
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: 175px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: 10px;
+      padding: 5px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+      display: none;
+      z-index: 50;
+    }
+
+    .dropdown-menu.open {
+      display: block;
+    }
+
+    .dropdown-item {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.12s ease;
+    }
+
+    .dropdown-item:hover {
+      background: var(--gold-tint);
+      color: var(--gold-bright);
+    }
+
+    .dropdown-ext {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Signature Gold Primary CTA */
+    .btn-gold-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      height: 36px;
+      padding: 0 14px 0 16px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #ECCB69 0%, #C89F2C 100%);
+      border: 1px solid #F5DD8D;
+      color: var(--text-on-gold);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      box-shadow: 0 0 24px rgba(212, 175, 55, 0.22);
+      transition: all 0.16s ease;
+      white-space: nowrap;
+    }
+
+    .btn-gold-cta:hover {
+      filter: brightness(1.06);
+      box-shadow: 0 0 30px rgba(212, 175, 55, 0.34);
+      transform: translateY(-0.5px);
+    }
+
+    .cta-badge {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      padding: 1px 7px;
+      border-radius: 6px;
+      background: rgba(9, 8, 5, 0.85);
+      color: var(--gold-bright);
+    }
+
+    /* ==================== WORKSPACE ==================== */
+    .workspace {
+      width: 100%;
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 26px 28px 60px;
+    }
+
+    /* Filter & Batch Bar */
+    .filter-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 22px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .filter-tabs {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 3px;
+      border-radius: 9px;
+    }
+
+    .filter-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 30px;
+      padding: 0 11px;
+      border-radius: 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+
+    .filter-tab:hover {
+      color: var(--text-primary);
+    }
+
+    .filter-tab.active {
+      background: var(--bg-surface-subtle);
+      border-color: var(--border-gold-subtle);
+      color: var(--gold-bright);
+    }
+
+    .filter-tab .tab-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.75;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-box svg {
+      position: absolute;
+      left: 10px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      height: 34px;
+      width: 220px;
+      padding: 0 12px 0 32px;
+      border-radius: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 12.5px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .search-input:focus {
+      border-color: var(--border-gold-strong);
+    }
+
+    .btn-best {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: var(--gold-tint);
+      border: 1px solid var(--border-gold-subtle);
+      color: var(--gold-bright);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-best:hover {
+      background: var(--gold-tint-strong);
+      border-color: var(--border-gold-strong);
+    }
+
+    /* ==================== DUPLICATE GROUP CARDS ==================== */
+    .cards-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .group-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.18s ease;
+    }
+
+    .group-card:hover {
+      border-color: var(--border-default);
+    }
+
+    .card-header {
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.012);
+    }
+
+    .card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .media-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 3px 7px;
+      border-radius: 5px;
+      background: var(--gold-tint);
+      border: 1px solid var(--border-gold-subtle);
+      color: var(--gold-bright);
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: var(--text-primary);
+    }
+
+    .card-chapter {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .card-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .meta-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 26px;
+      padding: 0 9px;
+      border-radius: 6px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .meta-pill.verified {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--text-secondary);
+    }
+
+    .meta-pill.verified svg {
+      color: var(--gold-primary);
+    }
+
+    .btn-keep-both {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 6px;
+      background: transparent;
+      border: 1px solid var(--border-default);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+
+    .btn-keep-both:hover {
+      background: var(--status-keep-bg);
+      border-color: var(--status-keep-border);
+      color: var(--status-keep);
+    }
+
+    /* Gold-Accented Recommendation Strip */
+    .rec-strip {
+      padding: 10px 20px;
+      background: rgba(212, 175, 55, 0.035);
+      border-bottom: 1px solid var(--border-subtle);
+      box-shadow: inset 2.5px 0 0 var(--gold-primary);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 12.5px;
+      color: #C9C9D2;
+    }
+
+    .rec-strip svg {
+      color: var(--gold-primary);
+      flex-shrink: 0;
+    }
+
+    .rec-strip strong {
+      color: var(--gold-bright);
+      font-weight: 600;
+    }
+
+    /* Candidate Rows */
+    .candidate-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .candidate-row {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-left: 3px solid transparent;
+      transition: background 0.15s ease, border-color 0.18s ease;
+    }
+
+    .candidate-row + .candidate-row {
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .candidate-row:hover {
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    .candidate-row[data-state="keep"] {
+      border-left-color: var(--status-keep);
+    }
+
+    .candidate-row[data-state="archive"] {
+      border-left-color: var(--status-archive);
+    }
+
+    .candidate-row[data-state="delete"] {
+      border-left-color: var(--status-delete);
+    }
+
+    .candidate-info {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .candidate-title-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .candidate-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+
+    .badge-best {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: var(--gold-tint);
+      border: 1px solid var(--border-gold-subtle);
+      color: var(--gold-bright);
+    }
+
+    .badge-hq {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #FFFFFF;
+    }
+
+    .candidate-meta {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+    }
+
+    .meta-kv strong {
+      color: #D4D4DC;
+      font-weight: 500;
+    }
+
+    .candidate-path-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+    }
+
+    .candidate-path {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 680px;
+    }
+
+    .btn-copy-path {
+      opacity: 0;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: all 0.14s ease;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .candidate-row:hover .btn-copy-path {
+      opacity: 1;
+    }
+
+    .btn-copy-path:hover {
+      color: var(--gold-bright);
+      background: var(--gold-tint);
+    }
+
+    /* 3-Way Segmented Action Toggle */
+    .segmented-actions {
+      display: inline-flex;
+      align-items: center;
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .seg-btn {
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+
+    .seg-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .seg-btn.active-keep {
+      background: var(--status-keep-bg);
+      border-color: var(--status-keep-border);
+      color: var(--status-keep);
+    }
+
+    .seg-btn.active-archive {
+      background: var(--status-archive-bg);
+      border-color: var(--status-archive-border);
+      color: var(--status-archive);
+    }
+
+    .seg-btn.active-delete {
+      background: var(--status-delete-bg);
+      border-color: var(--status-delete-border);
+      color: var(--status-delete);
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 28px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-gold-subtle);
+      color: var(--gold-bright);
+      padding: 10px 16px;
+      border-radius: 9px;
+      font-size: 12.5px;
+      font-weight: 500;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.75);
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+      transition: all 0.2s ease;
+      z-index: 100;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Confirm Modal Preview */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(6px);
+      display: none;
+      place-items: center;
+      z-index: 80;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: grid;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-gold-subtle);
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(212, 175, 55, 0.08);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .modal-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 18px;
+    }
+
+    .modal-summary {
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-around;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    @media (max-width: 980px) {
+      .sidebar {
+        display: none;
+      }
+      .candidate-row {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .segmented-actions {
+        align-self: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- ==================== LEFT SIDEBAR ==================== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="8" width="12" height="12" rx="2"></rect>
+            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>FindDuplicates</h1>
+          <span>Archival Engine</span>
+        </div>
+      </div>
+
+      <!-- Unified Scan Controls -->
+      <div class="scan-split">
+        <button class="btn-quick-scan" onclick="showToast('Quick Scan triggered')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          Quick Scan
+        </button>
+        <button class="btn-custom-scan" title="Run Custom Scan" onclick="showToast('Opening Custom Scan configuration...')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line>
+            <line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line>
+            <line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- De-duplicated Primary Navigation -->
+      <div class="nav-section-label">Workspace</div>
+      <nav class="nav-list">
+        <button class="nav-item active" onclick="selectNav(this, 'Resolution Report')">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            Resolution Report
+          </span>
+          <span class="nav-count">3</span>
+        </button>
+        <button class="nav-item" onclick="selectNav(this, 'Scan Jobs')">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            Scan Jobs
+          </span>
+          <span class="nav-count">4</span>
+        </button>
+        <button class="nav-item" onclick="selectNav(this, 'Saved Reports & History')">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            Saved Reports
+          </span>
+          <span class="nav-count">4</span>
+        </button>
+        <button class="nav-item" onclick="selectNav(this, 'Offline Tree Dumps')">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+            Offline Tree Dumps
+          </span>
+        </button>
+      </nav>
+
+      <!-- Compact Scan Telemetry -->
+      <div class="nav-section-label">Active Scan Metrics</div>
+      <div class="telemetry-card">
+        <div class="telemetry-grid">
+          <div class="telemetry-cell">
+            <span class="telemetry-val">3</span>
+            <span class="telemetry-lbl">Scanned</span>
+          </div>
+          <div class="telemetry-cell">
+            <span class="telemetry-val gold">3</span>
+            <span class="telemetry-lbl">Manga</span>
+          </div>
+          <div class="telemetry-cell">
+            <span class="telemetry-val">0</span>
+            <span class="telemetry-lbl">Doujinshi</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Utilities Footer -->
+      <div class="sidebar-footer">
+        <button class="nav-item" onclick="showToast('Opening live Scan Logs...')">
+          <span class="nav-item-left">
+            <span class="status-dot"></span>
+            Scan Logs
+          </span>
+          <span class="nav-count">0</span>
+        </button>
+        <button class="nav-item" onclick="showToast('Opening CasaOS Setup Guide...')">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            CasaOS Guide
+          </span>
+        </button>
+
+        <div class="safe-mode-pill" title="Scans only generate reports. No files are ever moved or deleted automatically. All changes require explicit manual confirmation.">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <div class="safe-mode-text">
+            <strong>Read-Only Guarantee</strong>
+            <span>No files moved or deleted until manual confirmation.</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ==================== MAIN COLUMN ==================== -->
+    <div class="main-column">
+      <!-- Single Clean Sticky Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="report-pill" title="Active Report loaded into Resolution Window">
+            <span class="report-pill-dot"></span>
+            <span>full_exe_20261123_203315_report.json</span>
+          </div>
+
+          <div class="dropdown-wrap">
+            <button class="btn-ghost" id="exportBtn" onclick="toggleExportMenu(event)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Export
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="dropdown-menu" id="exportMenu">
+              <button class="dropdown-item" onclick="triggerExport('HTML Report')">HTML Report <span class="dropdown-ext">.html</span></button>
+              <button class="dropdown-item" onclick="triggerExport('CSV Spreadsheet')">CSV Table <span class="dropdown-ext">.csv</span></button>
+              <button class="dropdown-item" onclick="triggerExport('JSON Raw Data')">JSON Data <span class="dropdown-ext">.json</span></button>
+            </div>
+          </div>
+
+          <button class="btn-icon-danger" title="Discard Active Report" onclick="showToast('Discard Report confirmation requested')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+
+        <button class="btn-gold-cta" onclick="openConfirmModal()">
+          Review &amp; Confirm Removal
+          <span class="cta-badge" id="pendingCountBadge">3</span>
+        </button>
+      </header>
+
+      <!-- Workspace Content -->
+      <main class="workspace">
+        <!-- Filter & Bulk Controls -->
+        <div class="filter-toolbar">
+          <div class="filter-tabs" role="tablist">
+            <button class="filter-tab active" onclick="setFilter(this, 'all')">All Duplicates <span class="tab-num">3</span></button>
+            <button class="filter-tab" onclick="setFilter(this, 'manga')">Manga <span class="tab-num">3</span></button>
+            <button class="filter-tab" onclick="setFilter(this, 'doujinshi')">Doujinshi <span class="tab-num">0</span></button>
+            <button class="filter-tab" onclick="setFilter(this, 'partials')">Partials / Splits <span class="tab-num">0</span></button>
+          </div>
+
+          <div class="toolbar-actions">
+            <div class="search-box">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" class="search-input" id="searchInput" placeholder="Filter duplicate items..." oninput="filterCards()" />
+            </div>
+            <button class="btn-ghost" onclick="bulkKeepAll()">Keep All</button>
+            <button class="btn-best" onclick="bulkPreselectBest()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4L22 12l-7.6 2.6L12 22l-2.4-7.4L2 12l7.6-2.6L12 2z"></path></svg>
+              Pre-Select Best
+            </button>
+          </div>
+        </div>
+
+        <!-- Duplicate Group Cards -->
+        <div class="cards-stack" id="cardsStack">
+
+          <!-- CARD 1 -->
+          <section class="group-card" data-category="manga" data-search="flag capture in the first move chapter 1 fuyuking ringmeigh alternative translation">
+            <div class="card-header">
+              <div class="card-title-group">
+                <span class="media-tag">Manga</span>
+                <h2 class="card-title">Flag Capture in the First Move</h2>
+                <span class="card-chapter">&middot; Chapter 1</span>
+              </div>
+              <div class="card-header-right">
+                <span class="meta-pill">Alternative Translation</span>
+                <span class="meta-pill verified">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  Visual Match &middot; H:2
+                </span>
+                <button class="btn-keep-both" onclick="keepGroupBoth(this)">Keep Both</button>
+              </div>
+            </div>
+
+            <div class="rec-strip">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+              <span><strong>Recommendation:</strong> Multiple scanlation groups found (RingMeigh, Fuyuking). Review translation quality before archiving.</span>
+            </div>
+
+            <div class="candidate-list">
+              <div class="candidate-row" data-state="archive" data-best="false">
+                <div class="candidate-info">
+                  <div class="candidate-title-line">
+                    <span class="candidate-name">Fuyuking_Ch.1 - Honest-Considerate MC vs Shy Senior_f62cb7</span>
+                  </div>
+                  <div class="candidate-meta">
+                    <span class="meta-kv">Group: <strong>Fuyuking</strong></span>
+                    <span class="meta-kv">Pages: <strong>4</strong></span>
+                    <span class="meta-kv">Volume: <strong>Aaa</strong></span>
+                  </div>
+                  <div class="candidate-path-wrap">
+                    <span class="candidate-path" title="/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Fuyuking_Ch.1 - Honest-Considerate MC vs Shy Senior_f62cb7">/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Fuyuking_Ch.1 - Honest-Considerate MC vs Shy Senior_f62cb7</span>
+                    <button class="btn-copy-path" title="Copy path" onclick="copyPath(this)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="segmented-actions">
+                  <button class="seg-btn" onclick="setRowState(this, 'keep')">Keep</button>
+                  <button class="seg-btn active-archive" onclick="setRowState(this, 'archive')">Archive</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'delete')">Delete</button>
+                </div>
+              </div>
+
+              <div class="candidate-row" data-state="keep" data-best="true">
+                <div class="candidate-info">
+                  <div class="candidate-title-line">
+                    <span class="candidate-name">RingMeigh_Ch.1 - Kind and good-hearing me VS over-mature senpai_e2b128</span>
+                    <span class="badge-best">&#9733; Best Match</span>
+                  </div>
+                  <div class="candidate-meta">
+                    <span class="meta-kv">Group: <strong>RingMeigh</strong></span>
+                    <span class="meta-kv">Pages: <strong>5</strong></span>
+                    <span class="meta-kv">Volume: <strong>Aaa</strong></span>
+                  </div>
+                  <div class="candidate-path-wrap">
+                    <span class="candidate-path" title="/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/RingMeigh_Ch.1 - Kind and good-hearing me VS over-mature senpai_e2b128">/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/RingMeigh_Ch.1 - Kind and good-hearing me VS over-mature senpai_e2b128</span>
+                    <button class="btn-copy-path" title="Copy path" onclick="copyPath(this)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="segmented-actions">
+                  <button class="seg-btn active-keep" onclick="setRowState(this, 'keep')">Keep</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'archive')">Archive</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'delete')">Delete</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CARD 2 -->
+          <section class="group-card" data-category="manga" data-search="flag capture in the first move chapter 13 waffle castle pecan scans hq version upgrade">
+            <div class="card-header">
+              <div class="card-title-group">
+                <span class="media-tag">Manga</span>
+                <h2 class="card-title">Flag Capture in the First Move</h2>
+                <span class="card-chapter">&middot; Chapter 13</span>
+              </div>
+              <div class="card-header-right">
+                <span class="meta-pill">Version Upgrade</span>
+                <span class="meta-pill verified">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  Visual Match &middot; H:3
+                </span>
+                <button class="btn-keep-both" onclick="keepGroupBoth(this)">Keep Both</button>
+              </div>
+            </div>
+
+            <div class="rec-strip">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+              <span><strong>Recommendation:</strong> Version upgrade detected. Keep Waffle Castle &amp; Pecan Scans (HQ version) and archive earlier release.</span>
+            </div>
+
+            <div class="candidate-list">
+              <div class="candidate-row" data-state="keep" data-best="true">
+                <div class="candidate-info">
+                  <div class="candidate-title-line">
+                    <span class="candidate-name">Waffle Castle &amp; Pecan Scans_Ch.13 - HQ version_066174</span>
+                    <span class="badge-best">&#9733; Best Match</span>
+                    <span class="badge-hq">HQ</span>
+                  </div>
+                  <div class="candidate-meta">
+                    <span class="meta-kv">Group: <strong>Waffle Castle &amp; Pecan Scans</strong></span>
+                    <span class="meta-kv">Pages: <strong>5</strong></span>
+                    <span class="meta-kv">Volume: <strong>Aaa</strong></span>
+                  </div>
+                  <div class="candidate-path-wrap">
+                    <span class="candidate-path" title="/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Waffle Castle & Pecan Scans_Ch.13 - HQ version_066174">/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Waffle Castle &amp; Pecan Scans_Ch.13 - HQ version_066174</span>
+                    <button class="btn-copy-path" title="Copy path" onclick="copyPath(this)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="segmented-actions">
+                  <button class="seg-btn active-keep" onclick="setRowState(this, 'keep')">Keep</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'archive')">Archive</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'delete')">Delete</button>
+                </div>
+              </div>
+
+              <div class="candidate-row" data-state="archive" data-best="false">
+                <div class="candidate-info">
+                  <div class="candidate-title-line">
+                    <span class="candidate-name">Waffle Castle_Ch.13 - Tsundere Girl vs Special Christmas Hero_33e062</span>
+                  </div>
+                  <div class="candidate-meta">
+                    <span class="meta-kv">Group: <strong>Waffle Castle</strong></span>
+                    <span class="meta-kv">Pages: <strong>4</strong></span>
+                    <span class="meta-kv">Volume: <strong>Aaa</strong></span>
+                  </div>
+                  <div class="candidate-path-wrap">
+                    <span class="candidate-path" title="/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Waffle Castle_Ch.13 - Tsundere Girl vs Special Christmas Hero_33e062">/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Waffle Castle_Ch.13 - Tsundere Girl vs Special Christmas Hero_33e062</span>
+                    <button class="btn-copy-path" title="Copy path" onclick="copyPath(this)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="segmented-actions">
+                  <button class="seg-btn" onclick="setRowState(this, 'keep')">Keep</button>
+                  <button class="seg-btn active-archive" onclick="setRowState(this, 'archive')">Archive</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'delete')">Delete</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CARD 3 -->
+          <section class="group-card" data-category="manga" data-search="flag capture in the first move chapter 5 kwegosaurus exact duplicate">
+            <div class="card-header">
+              <div class="card-title-group">
+                <span class="media-tag">Manga</span>
+                <h2 class="card-title">Flag Capture in the First Move</h2>
+                <span class="card-chapter">&middot; Chapter 5</span>
+              </div>
+              <div class="card-header-right">
+                <span class="meta-pill">Exact Duplicate</span>
+                <span class="meta-pill verified">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  Visual Match &middot; H:3
+                </span>
+                <button class="btn-keep-both" onclick="keepGroupBoth(this)">Keep Both</button>
+              </div>
+            </div>
+
+            <div class="rec-strip">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+              <span><strong>Recommendation:</strong> Identical chapter number found. Safe to keep one copy and archive duplicates.</span>
+            </div>
+
+            <div class="candidate-list">
+              <div class="candidate-row" data-state="keep" data-best="true">
+                <div class="candidate-info">
+                  <div class="candidate-title-line">
+                    <span class="candidate-name">RE_SCANS OF KWEGOSAURUS_Ch.5 - I'm Fine Even if She's a Little Bit Yandere_cd87c1</span>
+                    <span class="badge-best">&#9733; Best Match</span>
+                  </div>
+                  <div class="candidate-meta">
+                    <span class="meta-kv">Group: <strong>RE_SCANS OF KWEGOSAURUS</strong></span>
+                    <span class="meta-kv">Pages: <strong>3</strong></span>
+                    <span class="meta-kv">Volume: <strong>Aaa</strong></span>
+                  </div>
+                  <div class="candidate-path-wrap">
+                    <span class="candidate-path" title="/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/RE_SCANS OF KWEGOSAURUS_Ch.5 - I'm Fine Even if She's a Little Bit Yandere_cd87c1">/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/RE_SCANS OF KWEGOSAURUS_Ch.5 - I'm Fine Even if She's a Little Bit Yandere_cd87c1</span>
+                    <button class="btn-copy-path" title="Copy path" onclick="copyPath(this)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="segmented-actions">
+                  <button class="seg-btn active-keep" onclick="setRowState(this, 'keep')">Keep</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'archive')">Archive</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'delete')">Delete</button>
+                </div>
+              </div>
+
+              <div class="candidate-row" data-state="archive" data-best="false">
+                <div class="candidate-info">
+                  <div class="candidate-title-line">
+                    <span class="candidate-name">Uncredited_Ch.5 - Flag Capture in the First Move_a91b04</span>
+                  </div>
+                  <div class="candidate-meta">
+                    <span class="meta-kv">Group: <strong>Uncredited</strong></span>
+                    <span class="meta-kv">Pages: <strong>3</strong></span>
+                    <span class="meta-kv">Volume: <strong>Aaa</strong></span>
+                  </div>
+                  <div class="candidate-path-wrap">
+                    <span class="candidate-path" title="/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Uncredited_Ch.5 - Flag Capture in the First Move_a91b04">/DATA/SharedSgb/Manga/Manga_1/Aaa/Flag Capture in the First Move/Uncredited_Ch.5 - Flag Capture in the First Move_a91b04</span>
+                    <button class="btn-copy-path" title="Copy path" onclick="copyPath(this)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="segmented-actions">
+                  <button class="seg-btn" onclick="setRowState(this, 'keep')">Keep</button>
+                  <button class="seg-btn active-archive" onclick="setRowState(this, 'archive')">Archive</button>
+                  <button class="seg-btn" onclick="setRowState(this, 'delete')">Delete</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal Preview -->
+  <div class="modal-backdrop" id="confirmModal" onclick="if(event.target === this) closeConfirmModal()">
+    <div class="modal-box">
+      <h3 class="modal-title">Review &amp; Confirm File Actions</h3>
+      <p class="modal-desc">Explicit manual confirmation required. Files marked Keep will remain untouched.</p>
+      <div class="modal-summary" id="modalSummary"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeConfirmModal()">Cancel</button>
+        <button class="btn-gold-cta" onclick="executeConfirm()">Confirm &amp; Execute</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let currentFilter = 'all';
+
+    function updatePendingCount() {
+      const rows = document.querySelectorAll('.candidate-row');
+      let pending = 0;
+      rows.forEach(r => {
+        const s = r.dataset.state;
+        if (s === 'archive' || s === 'delete') pending++;
+      });
+      document.getElementById('pendingCountBadge').textContent = pending;
+    }
+
+    function applyRowState(row, state) {
+      row.dataset.state = state;
+      const btns = row.querySelectorAll('.seg-btn');
+      btns.forEach(b => b.classList.remove('active-keep', 'active-archive', 'active-delete'));
+      if (state === 'keep') btns[0].classList.add('active-keep');
+      if (state === 'archive') btns[1].classList.add('active-archive');
+      if (state === 'delete') btns[2].classList.add('active-delete');
+    }
+
+    function setRowState(btn, state) {
+      const row = btn.closest('.candidate-row');
+      applyRowState(row, state);
+      updatePendingCount();
+    }
+
+    function keepGroupBoth(btn) {
+      const card = btn.closest('.group-card');
+      card.querySelectorAll('.candidate-row').forEach(r => applyRowState(r, 'keep'));
+      updatePendingCount();
+      showToast('Marked all items in group as Keep');
+    }
+
+    function bulkKeepAll() {
+      document.querySelectorAll('.candidate-row').forEach(r => applyRowState(r, 'keep'));
+      updatePendingCount();
+      showToast('All duplicate items set to Keep');
+    }
+
+    function bulkPreselectBest() {
+      document.querySelectorAll('.candidate-row').forEach(r => {
+        applyRowState(r, r.dataset.best === 'true' ? 'keep' : 'archive');
+      });
+      updatePendingCount();
+      showToast('Pre-selected Best Match items and staged others for Archive');
+    }
+
+    function setFilter(btn, filter) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      filterCards();
+    }
+
+    function filterCards() {
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      document.querySelectorAll('.group-card').forEach(card => {
+        const catMatch = currentFilter === 'all' || card.dataset.category === currentFilter;
+        const textMatch = !q || card.dataset.search.includes(q);
+        card.style.display = (catMatch && textMatch) ? '' : 'none';
+      });
+    }
+
+    function toggleExportMenu(e) {
+      e.stopPropagation();
+      document.getElementById('exportMenu').classList.toggle('open');
+    }
+
+    document.addEventListener('click', () => {
+      document.getElementById('exportMenu').classList.remove('open');
+    });
+
+    function triggerExport(type) {
+      document.getElementById('exportMenu').classList.remove('open');
+      showToast(`Exporting ${type}...`);
+    }
+
+    function selectNav(btn, label) {
+      document.querySelectorAll('.sidebar .nav-list .nav-item').forEach(n => n.classList.remove('active'));
+      btn.classList.add('active');
+      showToast(`Switched view: ${label}`);
+    }
+
+    function copyPath(btn) {
+      const path = btn.previousElementSibling.getAttribute('title');
+      if (navigator.clipboard) navigator.clipboard.writeText(path).catch(() => {});
+      showToast('Copied file path to clipboard');
+    }
+
+    function openConfirmModal() {
+      let keep = 0, archive = 0, del = 0;
+      document.querySelectorAll('.candidate-row').forEach(r => {
+        if (r.dataset.state === 'keep') keep++;
+        if (r.dataset.state === 'archive') archive++;
+        if (r.dataset.state === 'delete') del++;
+      });
+      document.getElementById('modalSummary').innerHTML = `
+        <span style="color: var(--status-keep)">Keep: ${keep}</span>
+        <span style="color: var(--status-archive)">Archive: ${archive}</span>
+        <span style="color: var(--status-delete)">Delete: ${del}</span>
+      `;
+      document.getElementById('confirmModal').classList.add('open');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmModal').classList.remove('open');
+    }
+
+    function executeConfirm() {
+      closeConfirmModal();
+      showToast('Confirmation preview complete (Read-Only mockup)');
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+    }
+
+    updatePendingCount();
+  </script>
+</body>
+</html>
