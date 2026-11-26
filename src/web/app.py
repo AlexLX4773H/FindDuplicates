@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import FastAPI, Request, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.config import load_config, normalize_path
@@ -36,6 +37,10 @@ from src.web.jobs import job_manager, ScanJobCreatePayload, ScanJobUpdatePayload
 
 app = FastAPI(title="FindDuplicates Dashboard", version="2.1.0")
 
+_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
+if _ASSETS_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
+
 # In-memory session state for interactive UI
 STATE = {
     "is_scanning": False,
@@ -49,9 +54,57 @@ STATE = {
     "scan_progress": "",
     "logs": [],              # List[Dict[str, Any]]
     "active_scan_info": None, # Optional[Dict[str, Any]]
-    "loaded_report_name": "latest_report.json",
+    "loaded_report_name": None,
     "run_history": [],       # List[Dict[str, Any]]
 }
+
+_REPORT_META_CACHE: Dict[str, Any] = {}
+_HIDDEN_REPORTS = {"scan_jobs.json", "latest_report.json"}
+
+
+def _skip_report_file(name: str) -> bool:
+    return name in _HIDDEN_REPORTS
+
+
+def _cached_report_meta(path: Path) -> Dict[str, Any]:
+    """Parse a report JSON once per path, size, and mtime."""
+    import json
+    stat = path.stat()
+    token = (getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000)), stat.st_size)
+    key = str(path.resolve())
+    cached = _REPORT_META_CACHE.get(key)
+    if cached and cached[0] == token:
+        return cached[1]
+
+    meta = {
+        "duplicates_count": 0,
+        "partials_count": 0,
+        "total_scanned": 0,
+        "job_name": None,
+        "job_id": None,
+        "created_at": None,
+        "target": None,
+        "mode": None,
+    }
+    try:
+        with open(path, "r", encoding="utf-8") as jf:
+            jdata = json.load(jf)
+        dupes = jdata.get("duplicates", [])
+        parts = jdata.get("partials", [])
+        file_meta = jdata.get("metadata") or {}
+        summary = jdata.get("summary") or {}
+        meta["duplicates_count"] = len(dupes) if isinstance(dupes, list) else 0
+        meta["partials_count"] = len(parts) if isinstance(parts, list) else 0
+        meta["total_scanned"] = summary.get("total_scanned", meta["duplicates_count"])
+        meta["job_name"] = file_meta.get("job_name")
+        meta["job_id"] = file_meta.get("job_id")
+        meta["created_at"] = file_meta.get("created_at") or jdata.get("generated_at")
+        meta["target"] = file_meta.get("target")
+        meta["mode"] = file_meta.get("mode")
+    except Exception:
+        pass
+    _REPORT_META_CACHE[key] = (token, meta)
+    return meta
 
 _LOG_ID_COUNTER = 0
 
@@ -103,56 +156,51 @@ def _init_run_history_from_reports():
         if not rep_dir.exists():
             return
         for idx, f in enumerate(sorted(rep_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True), 1):
-            if f.name == "scan_jobs.json":
+            if _skip_report_file(f.name):
                 continue
             try:
-                with open(f, "r", encoding="utf-8") as jf:
-                    jdata = json.load(jf)
-                    dupes = len(jdata.get("duplicates", []))
-                    parts = len(jdata.get("partials", []))
-                    scanned = jdata.get("summary", {}).get("total_scanned", dupes)
-                    meta = jdata.get("metadata", {})
-                    job_name = meta.get("job_name")
-                    job_id = meta.get("job_id")
-                    target = meta.get("target") or ("manga" if "manga" in f.name.lower() else "doujinshi")
-                    mode = meta.get("mode") or "name"
-                    timestamp = meta.get("created_at") or jdata.get("generated_at")
-                    if not timestamp:
-                        timestamp = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                meta = _cached_report_meta(f)
+                job_name = meta.get("job_name")
+                target = meta.get("target") or ("manga" if "manga" in f.name.lower() else "doujinshi")
+                mode = meta.get("mode") or "name"
+                timestamp = meta.get("created_at")
+                if not timestamp:
+                    timestamp = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    timestamp = str(timestamp).replace("T", " ")[:19]
+
+                if not job_name:
+                    if "manga" in f.name.lower():
+                        job_name = "Manga / Manhwa Scan"
+                    elif "h_new_b2" in f.name.lower():
+                        job_name = "Offline Tree Dump (h_new_b2)"
+                    elif "h_temp_d" in f.name.lower():
+                        job_name = "Offline Tree Dump (h_temp_d)"
+                    elif "doujin" in f.name.lower():
+                        job_name = "Doujinshi Scan"
                     else:
-                        timestamp = str(timestamp).replace("T", " ")[:19]
+                        job_name = "Saved Scan Report"
 
-                    if not job_name:
-                        if "manga" in f.name.lower():
-                            job_name = "Manga / Manhwa Scan"
-                        elif "h_new_b2" in f.name.lower():
-                            job_name = "Offline Tree Dump (h_new_b2)"
-                        elif "h_temp_d" in f.name.lower():
-                            job_name = "Offline Tree Dump (h_temp_d)"
-                        elif "doujin" in f.name.lower():
-                            job_name = "Doujinshi Scan"
-                        else:
-                            job_name = "Saved Scan Report"
-
-                    STATE["run_history"].append({
-                        "id": f"run_hist_{idx}",
-                        "timestamp": timestamp,
-                        "target": target,
-                        "mode": mode,
-                        "job_name": job_name,
-                        "job_id": job_id,
-                        "total_scanned": scanned,
-                        "duplicates_count": dupes,
-                        "partials_count": parts,
-                        "duration_seconds": 1.5,
-                        "report_file": f.name,
-                        "status": "completed"
-                    })
+                STATE["run_history"].append({
+                    "id": f"run_hist_{idx}",
+                    "timestamp": timestamp,
+                    "target": target,
+                    "mode": mode,
+                    "job_name": job_name,
+                    "job_id": meta.get("job_id"),
+                    "total_scanned": meta.get("total_scanned", 0),
+                    "duplicates_count": meta.get("duplicates_count", 0),
+                    "partials_count": meta.get("partials_count", 0),
+                    "duration_seconds": 1.5,
+                    "report_file": f.name,
+                    "status": "completed"
+                })
             except Exception:
                 pass
     except Exception:
         pass
 
+job_manager.mark_stale_running_jobs()
 _init_run_history_from_reports()
 
 action_executor = ActionExecutor(default_archive_dir="./archive")
@@ -201,9 +249,8 @@ def get_state():
         "doujinshi_duplicates_count": len(STATE["doujinshi_duplicates"]),
         "video_duplicates_count": len(STATE.get("video_duplicates", [])),
         "active_scan_info": STATE.get("active_scan_info"),
-        "loaded_report_name": STATE.get("loaded_report_name", "latest_report.json"),
+        "loaded_report_name": STATE.get("loaded_report_name") or None,
         "run_history_count": len(STATE.get("run_history", [])),
-        "logs": STATE["logs"][-150:],
     }
 
 
@@ -265,34 +312,21 @@ def get_casaos_compose():
 @app.get("/api/reports")
 def list_reports():
     """Lists saved reports with metadata, duplicate counts, origin job, creation time, and available export formats."""
-    import json
     cfg = load_config()
     rep_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
     reports = []
     if rep_dir.exists():
         for f in sorted(rep_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
-            if f.name == "scan_jobs.json":
+            if _skip_report_file(f.name):
                 continue
 
-            dupes_count = 0
-            partials_count = 0
-            scanned_count = 0
-            job_name = None
-            job_id = None
-            created_at = None
-
-            try:
-                with open(f, "r", encoding="utf-8") as jf:
-                    jdata = json.load(jf)
-                    dupes_count = len(jdata.get("duplicates", []))
-                    partials_count = len(jdata.get("partials", []))
-                    scanned_count = jdata.get("summary", {}).get("total_scanned", dupes_count)
-                    meta = jdata.get("metadata", {})
-                    job_name = meta.get("job_name")
-                    job_id = meta.get("job_id")
-                    created_at = meta.get("created_at") or jdata.get("generated_at")
-            except Exception:
-                pass
+            meta = _cached_report_meta(f)
+            dupes_count = meta.get("duplicates_count", 0)
+            partials_count = meta.get("partials_count", 0)
+            scanned_count = meta.get("total_scanned", dupes_count)
+            job_name = meta.get("job_name")
+            job_id = meta.get("job_id")
+            created_at = meta.get("created_at")
 
             # Fallback for job_name if not in report metadata
             if not job_name:
@@ -353,7 +387,7 @@ def get_run_history():
     """Returns past scan execution runs and active report info."""
     return {
         "run_history": STATE.get("run_history", []),
-        "loaded_report_name": STATE.get("loaded_report_name", "latest_report.json")
+        "loaded_report_name": STATE.get("loaded_report_name") or None
     }
 
 
@@ -544,6 +578,23 @@ def delete_scan_job(job_id: str):
     return {"status": "deleted", "job_id": job_id}
 
 
+def _begin_scan(target: str, mode: str, job_id: Optional[str] = None, job_name: Optional[str] = None) -> None:
+    """Marks a scan active before the HTTP response returns, so a second run is rejected immediately."""
+    display = job_name or f"{target} ({mode}-based)"
+    STATE["is_scanning"] = True
+    STATE["status_message"] = f"Starting scan for {display}..."
+    STATE["scan_progress"] = "Queued..."
+    STATE["active_scan_info"] = {
+        "target": target,
+        "mode": mode,
+        "job_name": job_name,
+        "job_id": job_id,
+        "started_at": datetime.now().strftime("%H:%M:%S"),
+        "status": "running",
+        "elapsed_seconds": 0,
+    }
+
+
 @app.post("/api/jobs/{job_id}/run")
 def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
     """Executes a saved scan job in the background."""
@@ -563,6 +614,7 @@ def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
+    _begin_scan(target, mode, job["id"], job["name"])
     job_manager.update_job_run_status(job_id, status="running")
     excluded_manga = job.get("excluded_manga", [])
 
@@ -767,25 +819,25 @@ def run_parse_tree(payload: ParseTreePayload):
 
 def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None, excluded_manga: Optional[List[str]] = None, reference_paths: Optional[List[str]] = None):
     start_time = datetime.now()
-    STATE["is_scanning"] = True
-    display_title = job_name or f"{target} ({mode}-based)"
-    STATE["status_message"] = f"Starting scan for {display_title}..."
-    STATE["scan_progress"] = "Resolving target directories..."
-    STATE["active_scan_info"] = {
-        "target": target,
-        "mode": mode,
-        "job_name": job_name,
-        "job_id": job_id,
-        "started_at": start_time.strftime("%H:%M:%S"),
-        "status": "running",
-        "elapsed_seconds": 0
-    }
-
-    add_scan_log(f"🚀 Initializing scan job: '{display_title}' (Target='{target.upper()}', Mode='{mode.upper()}')", "INFO")
-    if excluded_manga:
-        add_scan_log(f"Manga exclusions applied ({len(excluded_manga)} titles): {', '.join(excluded_manga[:4])}{'...' if len(excluded_manga) > 4 else ''}", "INFO")
-
     try:
+        STATE["is_scanning"] = True
+        display_title = job_name or f"{target} ({mode}-based)"
+        STATE["status_message"] = f"Starting scan for {display_title}..."
+        STATE["scan_progress"] = "Resolving target directories..."
+        STATE["active_scan_info"] = {
+            "target": target,
+            "mode": mode,
+            "job_name": job_name,
+            "job_id": job_id,
+            "started_at": start_time.strftime("%H:%M:%S"),
+            "status": "running",
+            "elapsed_seconds": 0
+        }
+
+        add_scan_log(f"🚀 Initializing scan job: '{display_title}' (Target='{target.upper()}', Mode='{mode.upper()}')", "INFO")
+        if excluded_manga:
+            add_scan_log(f"Manga exclusions applied ({len(excluded_manga)} titles): {', '.join(excluded_manga[:4])}{'...' if len(excluded_manga) > 4 else ''}", "INFO")
+
         cfg = load_config()
         if mode == "reference":
             target = "doujinshi"
@@ -1028,28 +1080,16 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             "reference_paths": [str(p) for p in ref_targets],
         }
 
-        # Determine primary report file name
-        if job_name:
-            slug = re.sub(r'[^a-zA-Z0-9_-]+', '_', job_name.lower()).strip('_')
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            primary_rep_json = f"{slug}_{ts}_report.json"
-            primary_rep_html = f"{slug}_{ts}_report.html"
-            primary_rep_csv = f"{slug}_{ts}_report.csv"
-        else:
-            primary_rep_json = "latest_report.json"
-            primary_rep_html = "latest_report.html"
-            primary_rep_csv = "latest_report.csv"
+        slug = re.sub(r'[^a-zA-Z0-9_-]+', '_', (job_name or "manual").lower()).strip('_') or "manual"
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        primary_rep_json = f"{slug}_{ts}_report.json"
+        primary_rep_html = f"{slug}_{ts}_report.html"
+        primary_rep_csv = f"{slug}_{ts}_report.csv"
 
         add_scan_log(f"Generating reports in '{reports_dir}' ({primary_rep_json})...", "INFO")
         export_json(all_dupes, all_parts, str(reports_dir / primary_rep_json), extra_meta=report_meta)
         export_csv(all_dupes, str(reports_dir / primary_rep_csv))
         export_html(all_dupes, all_parts, STATE["total_scanned"], str(reports_dir / primary_rep_html))
-
-        # Always update latest_report.* copies as well
-        if primary_rep_json != "latest_report.json":
-            export_json(all_dupes, all_parts, str(reports_dir / "latest_report.json"), extra_meta=report_meta)
-            export_csv(all_dupes, str(reports_dir / "latest_report.csv"))
-            export_html(all_dupes, all_parts, STATE["total_scanned"], str(reports_dir / "latest_report.html"))
 
         add_scan_log(f"Saved {primary_rep_json}, {primary_rep_csv}, and {primary_rep_html}", "SUCCESS")
 
@@ -1111,6 +1151,10 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
         validate_reference_directories(payload.target, payload.mode, payload.paths, payload.reference_paths)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+    _begin_scan(payload.target, payload.mode, payload.job_id, payload.job_name)
+    if payload.job_id:
+        job_manager.update_job_run_status(payload.job_id, status="running")
 
     background_tasks.add_task(
         _run_background_scan,

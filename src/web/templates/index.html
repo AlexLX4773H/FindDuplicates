@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FindDuplicates Interactive Dashboard & Resolution Window</title>
+  <link rel="icon" href="/assets/icon-64.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -74,8 +75,9 @@
     .brand-mark {
       width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; display: grid; place-items: center;
       color: var(--gold-bright); border: 1px solid var(--border-gold-subtle);
-      background: linear-gradient(145deg, rgba(212,175,55,0.22), rgba(212,175,55,0.04));
+      background: linear-gradient(145deg, rgba(212,175,55,0.22), rgba(212,175,55,0.04)); overflow: hidden;
     }
+    .brand-mark img { width: 22px; height: 22px; object-fit: contain; display: block; }
     .brand h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
     .brand-status { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
     .status-dot, .nav-log-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--status-keep); flex-shrink: 0; display: inline-block; }
@@ -163,8 +165,12 @@
       background: var(--bg-surface-elevated); border: 1px solid var(--border-default); border-radius: 10px; padding: 6px;
       box-shadow: 0 12px 32px rgba(0,0,0,0.45);
     }
-    .export-menu a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--text-primary); text-decoration: none; font-size: 12.5px; }
-    .export-menu a:hover { background: var(--gold-tint); }
+    .export-menu a, .export-menu button {
+      display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 6px;
+      border: 0; background: transparent; color: var(--text-primary); text-decoration: none;
+      font-size: 12.5px; font-weight: 500; cursor: pointer;
+    }
+    .export-menu a:hover, .export-menu button:hover { background: var(--gold-tint); }
     .btn, .btn-ghost, .btn-gold, .btn-danger {
       border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary);
       padding: 7px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
@@ -348,9 +354,7 @@
     <aside id="appSidebar" class="sidebar">
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M4 7h10a4 4 0 0 1 0 8H8"/><path d="M8 7v10"/><path d="M14 15h6"/>
-          </svg>
+          <img src="/assets/icon-64.png" alt="">
         </div>
         <div class="brand-copy">
           <h1>FindDuplicates</h1>
@@ -452,14 +456,14 @@
           <div class="view-label">Active View: <strong id="activeViewLabel">Report Resolution Window</strong></div>
           <div class="report-pill" title="Active report">
             <span class="report-dot"></span>
-            <span id="activeReportNameBadge">latest_report.json</span>
+            <span id="activeReportNameBadge">None</span>
           </div>
           <div class="export-wrap" id="exportWrap">
             <button type="button" class="btn-ghost" id="exportBtn" onclick="toggleExportMenu(event)">Export</button>
             <div id="exportMenu" class="export-menu hidden">
-              <a id="btnViewHtmlReport" href="/api/reports/download/latest_report.html" target="_blank">HTML Report</a>
-              <a id="btnDownloadCsvReport" href="/api/reports/download/latest_report.csv" download>CSV</a>
-              <a id="btnDownloadJsonReport" href="/api/reports/download/latest_report.json" download>JSON</a>
+              <a id="btnViewHtmlReport" href="#" class="opacity-40 pointer-events-none" target="_blank">HTML Report</a>
+              <a id="btnDownloadCsvReport" href="#" class="opacity-40 pointer-events-none" download>CSV</a>
+              <a id="btnDownloadJsonReport" href="#" class="opacity-40 pointer-events-none" download>JSON</a>
             </div>
           </div>
           <button id="btnDiscardActiveReport" onclick="discardActiveReport()" class="btn-ghost btn-discard" title="Discard Active Report" aria-label="Discard Active Report">
@@ -688,7 +692,13 @@
                 <input id="searchInput" type="text" placeholder="Filter duplicate items...">
               </div>
               <button onclick="keepAllDuplicates()" id="btnKeepAll" class="btn btn-keep" title="Keep Both Duplicates: Marks all items across all duplicate groups to Keep so nothing is moved or deleted">Keep All</button>
-              <button onclick="autoSelectRecommended()" class="btn btn-gold-ghost" title="Marks recommended highest quality copy to stay, and duplicates to be moved to archive">Pre-Select Best</button>
+              <div class="export-wrap" id="preselectWrap">
+                <button type="button" onclick="togglePreselectMenu(event)" class="btn btn-gold-ghost" title="Keep the recommended copy, then archive or delete the rest">Pre-Select Best</button>
+                <div id="preselectMenu" class="export-menu hidden">
+                  <button type="button" onclick="autoSelectRecommended('move_archive')">Archive duplicates</button>
+                  <button type="button" onclick="autoSelectRecommended('delete')">Delete duplicates</button>
+                </div>
+              </div>
             </div>
           </div>
           <div id="cardsContainer">
@@ -848,6 +858,11 @@
     let itemRegistry = [];
     let selectedActions = {};
     let isScanning = false;
+    let activeScanInfo = null;
+    let stateFetchInFlight = false;
+    let reconciledStaleJobs = false;
+    let searchRenderTimer = null;
+    const LOG_DOM_LIMIT = 400;
     let lastLogId = 0;
     let isLogConsoleOpen = false;
     let autoScrollEnabled = true;
@@ -913,12 +928,12 @@
           data.logs.forEach(log => {
             if (log.id > lastLogId) {
               lastLogId = log.id;
-              consoleOut.appendChild(formatLogEntry(log));
-              if (modalOut) {
-                modalOut.appendChild(formatLogEntry(log));
-              }
+              if (consoleOut) consoleOut.appendChild(formatLogEntry(log));
+              if (modalOut) modalOut.appendChild(formatLogEntry(log));
             }
           });
+          trimLogNodes(consoleOut, LOG_DOM_LIMIT);
+          trimLogNodes(modalOut, LOG_DOM_LIMIT);
 
           if (autoScrollEnabled) {
             consoleOut.scrollTop = consoleOut.scrollHeight;
@@ -929,6 +944,13 @@
         }
       } catch (err) {
         console.error('fetchLogs error:', err);
+      }
+    }
+
+    function trimLogNodes(container, maxNodes) {
+      if (!container) return;
+      while (container.childElementCount > maxNodes) {
+        container.removeChild(container.firstElementChild);
       }
     }
 
@@ -1037,11 +1059,14 @@
     }
 
     async function fetchState() {
+      if (stateFetchInFlight) return;
+      stateFetchInFlight = true;
       try {
         const res = await fetch('/api/state');
         const data = await res.json();
         const wasScanning = isScanning;
         isScanning = data.is_scanning;
+        activeScanInfo = data.active_scan_info || null;
 
         document.getElementById('statusMessage').innerText = data.status_message || 'Ready';
         document.getElementById('statScanned').innerText = data.total_scanned;
@@ -1050,9 +1075,7 @@
         const statVideo = document.getElementById('statVideoDupes');
         if (statVideo) statVideo.innerText = data.video_duplicates_count || 0;
 
-        if (data.loaded_report_name) {
-          updateActiveReportLinks(data.loaded_report_name);
-        }
+        updateActiveReportLinks(data.loaded_report_name);
 
         const repBadge = document.getElementById('reportsCountBadge');
         if (repBadge && data.run_history_count !== undefined) {
@@ -1066,6 +1089,7 @@
         const progressBar = document.getElementById('consoleProgressBar');
 
         if (isScanning) {
+          reconciledStaleJobs = false;
           indicator.className = 'status-dot dot-live scanning-pulse';
           if (navLogDot) navLogDot.className = 'nav-log-dot dot-live scanning-pulse';
           if (progressBar) progressBar.classList.remove('hidden');
@@ -1099,6 +1123,9 @@
               btnStart.disabled = false;
               btnStart.innerHTML = '<span>▶️ Generate Report</span>';
             }
+          } else if (!reconciledStaleJobs && savedJobsData.some(j => j.last_status === 'running')) {
+            reconciledStaleJobs = true;
+            await loadScanJobs();
           }
         }
 
@@ -1107,6 +1134,8 @@
         }
       } catch (e) {
         console.error(e);
+      } finally {
+        stateFetchInFlight = false;
       }
     }
 
@@ -1232,7 +1261,7 @@
         const data = await res.json();
         const reports = data.reports || [];
         const history = data.run_history || [];
-        const activeLoaded = data.loaded_report_name || 'latest_report.json';
+        const activeLoaded = data.loaded_report_name || '';
 
         // Update badges
         const repCountBadge = document.getElementById('reportsCountBadge');
@@ -1296,13 +1325,32 @@
             histContainer.innerHTML = '<div class="empty-state">No scan runs recorded in history yet.</div>';
           } else {
             histContainer.innerHTML = '';
-            history.forEach(run => {
+            history.forEach((run, idx) => {
               const item = document.createElement('div');
               item.className = 'history-row';
               const jobDisplayName = run.job_name || (run.target + ' Scan');
+              const pulsing = isScanning && run.status === 'running';
+              const dotClass = pulsing ? 'scanning-pulse' : (run.status === 'completed' ? 'is-done' : '');
+              const reportFile = run.report_file || '';
+              const stem = reportFile.replace(/\.json$/i, '');
+              const encodedReport = encodeURIComponent(reportFile);
+              const actions = reportFile ? `
+                <div class="inline-actions">
+                  <button type="button" onclick="loadSavedReport(decodeURIComponent('${encodedReport}'))" class="btn btn-sm">Load</button>
+                  <div class="export-wrap">
+                    <button type="button" class="btn btn-sm" onclick="toggleNamedMenu(event, 'historyExport-${idx}')">Export</button>
+                    <div id="historyExport-${idx}" class="export-menu hidden">
+                      <a href="/api/reports/download/${encodeURIComponent(stem)}.html" target="_blank">HTML</a>
+                      <a href="/api/reports/download/${encodeURIComponent(stem)}.csv" download>CSV</a>
+                      <a href="/api/reports/download/${encodedReport}" download>JSON</a>
+                    </div>
+                  </div>
+                  <button type="button" onclick="deleteSavedReport(decodeURIComponent('${encodedReport}'))" class="btn btn-sm btn-danger-ghost">Delete</button>
+                </div>
+              ` : '';
               item.innerHTML = `
                 <div class="history-main">
-                  <span class="dot ${run.status === 'completed' ? 'is-done' : 'scanning-pulse'}"></span>
+                  <span class="dot ${dotClass}"></span>
                   <div>
                     <div class="inline-actions">
                       <strong>${escapeHtml(jobDisplayName)}</strong>
@@ -1312,7 +1360,7 @@
                     <div class="hint">Scanned ${run.total_scanned} items · ${run.duplicates_count} duplicate groups${run.partials_count > 0 ? ` · ${run.partials_count} partials` : ''} · ${run.duration_seconds}s</div>
                   </div>
                 </div>
-                ${run.report_file ? `<button onclick="loadSavedReport('${run.report_file}')" class="btn btn-sm">Load Report</button>` : ''}
+                ${actions}
               `;
               histContainer.appendChild(item);
 
@@ -1376,13 +1424,18 @@
             <div class="path-line truncate" title="${escapeHtml(p)}">${escapeHtml(p)}</div>
           `).join('');
 
+          const liveJob = isScanning && activeScanInfo && activeScanInfo.job_id === job.id;
           let statusBadge = '<span class="hint">Never executed</span>';
-          if (job.last_status === 'running') {
+          if (liveJob) {
             statusBadge = '<span class="text-gold scanning-pulse">Running now...</span>';
           } else if (job.last_status === 'completed') {
             statusBadge = `<span class="text-keep">Completed (${job.last_duplicates_count || 0} dupes found)</span>`;
           } else if (job.last_status === 'failed') {
             statusBadge = '<span class="text-delete">Last run failed</span>';
+          } else if (job.last_status === 'interrupted') {
+            statusBadge = '<span class="hint">Interrupted</span>';
+          } else if (job.last_status === 'running') {
+            statusBadge = '<span class="hint">Not running</span>';
           }
 
           card.innerHTML = `
@@ -1617,6 +1670,9 @@
         });
         const data = await res.json();
         if (res.ok) {
+          isScanning = true;
+          activeScanInfo = { job_id: jobId, status: 'running' };
+          reconciledStaleJobs = false;
           // Open and scroll to live console panel
           const consolePanel = document.getElementById('liveScanConsolePanel');
           if (consolePanel) {
@@ -1941,9 +1997,9 @@
                 </div>
               </div>
               <div class="seg">
-                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'keep')" class="${curAction === 'keep' ? 'is-keep' : ''}">Keep</button>
-                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'move_archive')" class="${curAction === 'move_archive' ? 'is-archive' : ''}">Archive</button>
-                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'delete')" class="${curAction === 'delete' ? 'is-delete' : ''}">Delete</button>
+                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'keep', this)" class="${curAction === 'keep' ? 'is-keep' : ''}">Keep</button>
+                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'move_archive', this)" class="${curAction === 'move_archive' ? 'is-archive' : ''}">Archive</button>
+                <button type="button" onclick="setItemActionByIndex(${itemIdx}, 'delete', this)" class="${curAction === 'delete' ? 'is-delete' : ''}">Delete</button>
               </div>
             </div>
           `;
@@ -1969,11 +2025,24 @@
       });
     }
 
-    function setItemActionByIndex(idx, action) {
+    function setItemActionByIndex(idx, action, btn) {
       const path = itemRegistry[idx];
-      if (path) {
-        setItemAction(path, action);
+      if (!path) return;
+      selectedActions[path] = action;
+      const row = btn && btn.closest ? btn.closest('.candidate-row') : null;
+      if (!row) {
+        renderActiveView();
+        updateActionBadge();
+        return;
       }
+      row.classList.remove('action-keep', 'action-archive', 'action-delete');
+      row.classList.add(action === 'keep' ? 'action-keep' : (action === 'delete' ? 'action-delete' : 'action-archive'));
+      const seg = row.querySelector('.seg');
+      if (seg) {
+        seg.querySelectorAll('button').forEach(b => b.classList.remove('is-keep', 'is-archive', 'is-delete'));
+        btn.classList.add(action === 'keep' ? 'is-keep' : (action === 'delete' ? 'is-delete' : 'is-archive'));
+      }
+      updateActionBadge();
     }
 
     function setItemAction(itemPath, action) {
@@ -1982,15 +2051,17 @@
       updateActionBadge();
     }
 
-    function autoSelectRecommended() {
+    function autoSelectRecommended(action) {
+      const chosen = action === 'delete' ? 'delete' : 'move_archive';
       duplicatesData.forEach(g => {
         if (g.position_matched === false) return;
         g.items.forEach(it => {
           const path = it.file_path || it.raw_name || it.work_name;
           const isKeeper = !!g.recommended_keep_path && (path === g.recommended_keep_path || (it.raw_name || '') === g.recommended_keep_path);
-          selectedActions[path] = isKeeper ? 'keep' : 'move_archive';
+          selectedActions[path] = isKeeper ? 'keep' : chosen;
         });
       });
+      closeFloatingMenus();
       renderActiveView();
       updateActionBadge();
     }
@@ -2159,6 +2230,8 @@
         const data = await res.json();
         if (res.ok) {
           isScanning = true;
+          activeScanInfo = data.job_id ? { job_id: data.job_id, status: 'running' } : null;
+          reconciledStaleJobs = false;
           statusBox.innerHTML = `<span class="text-keep font-bold">✓ Scan started!</span> Streaming live execution output below:`;
           setPollRate(750);
           await fetchLogs();
@@ -2377,18 +2450,29 @@
     }
 
 
-    function toggleExportMenu(e) {
+    function closeFloatingMenus() {
+      document.querySelectorAll('.export-menu').forEach(menu => menu.classList.add('hidden'));
+    }
+    function toggleNamedMenu(e, menuId) {
       if (e) e.stopPropagation();
-      const menu = document.getElementById('exportMenu');
-      if (menu) menu.classList.toggle('hidden');
+      const menu = document.getElementById(menuId);
+      const willOpen = menu && menu.classList.contains('hidden');
+      closeFloatingMenus();
+      if (menu && willOpen) menu.classList.remove('hidden');
+    }
+    function toggleExportMenu(e) {
+      toggleNamedMenu(e, 'exportMenu');
+    }
+    function togglePreselectMenu(e) {
+      toggleNamedMenu(e, 'preselectMenu');
     }
     function closeExportMenu() {
       const menu = document.getElementById('exportMenu');
       if (menu) menu.classList.add('hidden');
     }
     document.addEventListener('click', (e) => {
-      const wrap = document.getElementById('exportWrap');
-      if (wrap && !wrap.contains(e.target)) closeExportMenu();
+      if (e.target.closest && e.target.closest('.export-wrap')) return;
+      closeFloatingMenus();
     });
     function toggleSidebar() {
       document.getElementById('appSidebar').classList.toggle('is-open');
@@ -2401,7 +2485,10 @@
       if (backdrop) backdrop.classList.remove('is-open');
     }
 
-    document.getElementById('searchInput').addEventListener('input', renderActiveView);
+    document.getElementById('searchInput').addEventListener('input', () => {
+      clearTimeout(searchRenderTimer);
+      searchRenderTimer = setTimeout(renderActiveView, 150);
+    });
 
     // Initial polling & setup
     syncLibraryJobFields();

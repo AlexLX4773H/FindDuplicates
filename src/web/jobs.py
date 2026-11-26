@@ -289,6 +289,18 @@ class ScanJobManager:
                 break
         self._save_all(jobs)
 
+    def mark_stale_running_jobs(self) -> int:
+        """A process restart cannot still be scanning. Clear leftover running flags."""
+        jobs = self.list_jobs()
+        changed = 0
+        for job in jobs:
+            if job.get("last_status") == "running":
+                job["last_status"] = "interrupted"
+                changed += 1
+        if changed:
+            self._save_all(jobs)
+        return changed
+
 
 # Global singleton instance
 job_manager = ScanJobManager()
