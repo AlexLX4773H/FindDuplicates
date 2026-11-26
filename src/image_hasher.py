@@ -4,6 +4,7 @@ Computes dHash / pHash for chapter pages and doujinshi covers directly from
 loose image folders or streamed from .cbz / .zip archive headers without full extraction.
 """
 
+import hashlib
 import os
 import zipfile
 from io import BytesIO
@@ -278,3 +279,159 @@ def cluster_visually_matching_items(items: List[dict], threshold: int = 12) -> T
     if compared > 0 and unreadable == compared:
         return [], "unreadable"
     return [], "different"
+
+
+def perceptual_signature(item_path: str) -> Optional[List[Tuple[int, Optional[str]]]]:
+    """
+    dHash of the story-page sample, computed once per chapter.
+    Missing pages stay in the list so later comparisons keep the same alignment
+    as verify_chapter_similarity.
+    """
+    if not HAS_IMAGE_DEPS:
+        return None
+    samples = sample_page_indices(count_images(item_path))
+    if not samples:
+        return None
+    signature = [(index, compute_perceptual_hash(item_path, index)) for index in samples]
+    if not any(digest for _, digest in signature):
+        return None
+    return signature
+
+
+def compare_signatures(
+    sig_a: List[Tuple[int, Optional[str]]],
+    sig_b: List[Tuple[int, Optional[str]]],
+    threshold: int = 12,
+) -> Tuple[bool, int, str]:
+    """Median Hamming distance of precomputed story-page hashes."""
+    judged: List[Tuple[int, int]] = []
+    for (index_a, hash_a), (_, hash_b) in zip(sig_a, sig_b):
+        if not hash_a or not hash_b:
+            continue
+        dist = compute_hamming_distance(hash_a, hash_b)
+        if dist is None:
+            continue
+        judged.append((index_a, dist))
+
+    if not judged:
+        return False, 999, "Could not extract page images for visual comparison"
+
+    story = [dist for index, dist in judged if index != 0] or [dist for _, dist in judged]
+    story_sorted = sorted(story)
+    median = story_sorted[len(story_sorted) // 2]
+    if median <= threshold:
+        return True, median, f"Visual match verified (Hamming distance: {median})"
+    return False, median, f"Visual mismatch (Hamming distance: {median} > {threshold})"
+
+
+def cluster_by_perceptual_signature(
+    items: List[dict], threshold: int = 12
+) -> List[Tuple[List[dict], int, str]]:
+    """
+    Cluster chapters by image similarity. Names are not consulted.
+    Each chapter's page hashes are computed once, then compared.
+    """
+    usable: List[dict] = []
+    signatures: List[List[Tuple[int, Optional[str]]]] = []
+    for it in items:
+        path = it.get("file_path")
+        if not path:
+            continue
+        signature = perceptual_signature(path)
+        if not signature:
+            continue
+        usable.append(it)
+        signatures.append(signature)
+
+    if len(usable) < 2:
+        return []
+
+    parent = list(range(len(usable)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    pair_distance: Dict[Tuple[int, int], int] = {}
+    for i in range(len(usable)):
+        for j in range(i + 1, len(usable)):
+            match, dist, _expl = compare_signatures(signatures[i], signatures[j], threshold)
+            if match:
+                parent[find(i)] = find(j)
+                pair_distance[(i, j)] = dist
+
+    buckets: Dict[int, List[int]] = {}
+    for i in range(len(usable)):
+        buckets.setdefault(find(i), []).append(i)
+
+    clusters: List[Tuple[List[dict], int, str]] = []
+    for indexes in buckets.values():
+        if len(indexes) < 2:
+            continue
+        distances = [
+            pair_distance[(a, b)]
+            for a in indexes
+            for b in indexes
+            if a < b and (a, b) in pair_distance
+        ]
+        dist = min(distances) if distances else 0
+        clusters.append((
+            [usable[i] for i in indexes],
+            dist,
+            f"Visual match verified (Hamming distance: {dist})",
+        ))
+    return clusters
+
+
+def _image_payloads(item_path: str) -> List[Tuple[str, bytes]]:
+    """Image files in a chapter folder or archive, as (relative name, bytes)."""
+    p = Path(item_path)
+    if not p.exists():
+        return []
+
+    if p.is_file() and p.suffix.lower() in {".cbz", ".zip"}:
+        payloads: List[Tuple[str, bytes]] = []
+        try:
+            with zipfile.ZipFile(p, "r") as z:
+                for name in z.namelist():
+                    if is_image_file(name) and not name.startswith("__MACOSX"):
+                        payloads.append((name.replace("\\", "/"), z.read(name)))
+        except (zipfile.BadZipFile, OSError, PermissionError):
+            return []
+        return payloads
+
+    if not p.is_dir():
+        return []
+
+    payloads = []
+    for dirpath, dirnames, filenames in os.walk(p):
+        dirnames[:] = [d for d in dirnames if d != "__MACOSX"]
+        for filename in filenames:
+            if not is_image_file(filename):
+                continue
+            full = Path(dirpath) / filename
+            try:
+                payloads.append((full.relative_to(p).as_posix(), full.read_bytes()))
+            except OSError:
+                continue
+    return payloads
+
+
+def folder_content_fingerprint(item_path: str) -> Optional[str]:
+    """
+    SHA-256 of every image file, folded in relative-name order.
+    Identical bytes match. A re-encoded page does not.
+    """
+    payloads = _image_payloads(item_path)
+    if not payloads:
+        return None
+    folded = hashlib.sha256()
+    for name, data in sorted(payloads, key=lambda item: item[0].lower()):
+        digest = hashlib.sha256(data).hexdigest()
+        folded.update(name.encode("utf-8"))
+        folded.update(b"\0")
+        folded.update(digest.encode("ascii"))
+        folded.update(b"\n")
+    return folded.hexdigest()

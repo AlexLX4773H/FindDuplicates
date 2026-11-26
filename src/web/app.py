@@ -16,7 +16,14 @@ from pydantic import BaseModel
 
 from src.config import load_config, normalize_path
 from src.scanner import scan_manga_directory, scan_doujinshi_directory
-from src.detector import detect_manga_duplicates, detect_manga_partials, detect_doujinshi_duplicates, retain_visual_matches
+from src.detector import (
+    detect_manga_duplicates,
+    detect_manga_partials,
+    detect_doujinshi_duplicates,
+    detect_visual_duplicates,
+    detect_exact_hash_duplicates,
+    retain_visual_matches,
+)
 from src.parser import parse_tree_dump_lines
 from src.actions import ActionExecutor
 from src.reporter import export_json, export_csv, export_html
@@ -165,7 +172,7 @@ class ParseTreePayload(BaseModel):
 
 class ScanPayload(BaseModel):
     target: str = "manga"  # 'manga', 'doujinshi', 'all'
-    mode: str = "name"     # 'name', 'image'
+    mode: str = "name"     # 'name', 'image', 'visual', 'exact'
     paths: Optional[List[str]] = None
     manga_paths: Optional[List[str]] = None
     doujinshi_paths: Optional[List[str]] = None
@@ -820,17 +827,33 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
                 else:
                     add_scan_log(f"Manga directory not found or unmounted: {mp}", "WARN")
 
-            add_scan_log(f"Running intra-series duplicate detector on {len(chapters)} manga chapters...", "INFO")
-            dupes = detect_manga_duplicates(chapters)
-            parts = detect_manga_partials(chapters, check_mode=mode)
-            add_scan_log(f"Detected {len(dupes)} duplicate groups and {len(parts)} partial chapter issues.", "SUCCESS" if len(dupes) > 0 else "INFO")
-
-            if mode == "image":
-                dupes = retain_visual_matches(
-                    dupes,
-                    threshold=12,
+            if mode == "visual":
+                add_scan_log(f"Running visual similarity scan on {len(chapters)} manga chapters (names ignored)...", "INFO")
+                dupes = detect_visual_duplicates(
+                    chapters,
+                    target_type="manga",
                     progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
                 )
+                parts = []
+            elif mode == "exact":
+                add_scan_log(f"Running exact hash check on {len(chapters)} manga chapters...", "INFO")
+                dupes = detect_exact_hash_duplicates(
+                    chapters,
+                    target_type="manga",
+                    progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+                )
+                parts = []
+            else:
+                add_scan_log(f"Running intra-series duplicate detector on {len(chapters)} manga chapters...", "INFO")
+                dupes = detect_manga_duplicates(chapters)
+                parts = detect_manga_partials(chapters, check_mode=mode)
+                add_scan_log(f"Detected {len(dupes)} duplicate groups and {len(parts)} partial chapter issues.", "SUCCESS" if len(dupes) > 0 else "INFO")
+                if mode == "image":
+                    dupes = retain_visual_matches(
+                        dupes,
+                        threshold=12,
+                        progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+                    )
 
             STATE["manga_duplicates"] = dupes
             STATE["manga_partials"] = parts
@@ -851,16 +874,30 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
                 else:
                     add_scan_log(f"Doujinshi directory not found or unmounted: {dp}", "WARN")
 
-            add_scan_log(f"Running global cross-directory duplicate detector on {len(works)} doujinshi works...", "INFO")
-            dupes = detect_doujinshi_duplicates(works)
-            add_scan_log(f"Detected {len(dupes)} doujinshi duplicate groups across library.", "SUCCESS" if len(dupes) > 0 else "INFO")
-
-            if mode == "image":
-                dupes = retain_visual_matches(
-                    dupes,
-                    threshold=12,
+            if mode == "visual":
+                add_scan_log(f"Running visual similarity scan on {len(works)} doujinshi works (names ignored)...", "INFO")
+                dupes = detect_visual_duplicates(
+                    works,
+                    target_type="doujinshi",
                     progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
                 )
+            elif mode == "exact":
+                add_scan_log(f"Running exact hash check on {len(works)} doujinshi works...", "INFO")
+                dupes = detect_exact_hash_duplicates(
+                    works,
+                    target_type="doujinshi",
+                    progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+                )
+            else:
+                add_scan_log(f"Running global cross-directory duplicate detector on {len(works)} doujinshi works...", "INFO")
+                dupes = detect_doujinshi_duplicates(works)
+                add_scan_log(f"Detected {len(dupes)} doujinshi duplicate groups across library.", "SUCCESS" if len(dupes) > 0 else "INFO")
+                if mode == "image":
+                    dupes = retain_visual_matches(
+                        dupes,
+                        threshold=12,
+                        progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+                    )
 
             STATE["doujinshi_duplicates"] = dupes
             if target == "doujinshi":

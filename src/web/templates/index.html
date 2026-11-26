@@ -573,7 +573,9 @@
                 <label class="field-label" for="jobModeSelect">Detection Modality</label>
                 <select id="jobModeSelect" class="field">
                   <option value="name">Name &amp; Metadata (Fast)</option>
-                  <option value="image">Visual Perceptual Hashing (dHash / pHash)</option>
+                  <option value="image">Name and Hash</option>
+                  <option value="visual">Visual Similarity</option>
+                  <option value="exact">Exact Hash Check</option>
                 </select>
               </div>
               <div>
@@ -677,7 +679,9 @@
           <span class="field-label">Detection Modality</span>
           <div class="choice-grid cols-2">
             <label class="choice"><input type="radio" name="scanMode" value="name" checked><div><strong>Name &amp; Metadata</strong><span>Chapter numbers, tags, scanlators</span></div></label>
-            <label class="choice"><input type="radio" name="scanMode" value="image"><div><strong>Visual Perceptual Hashing</strong><span>Verifies artwork via dHash / pHash</span></div></label>
+            <label class="choice"><input type="radio" name="scanMode" value="image"><div><strong>Name and Hash</strong><span>Same chapter number, then perceptual hash</span></div></label>
+            <label class="choice"><input type="radio" name="scanMode" value="visual"><div><strong>Visual Similarity</strong><span>Image similarity only, names ignored</span></div></label>
+            <label class="choice"><input type="radio" name="scanMode" value="exact"><div><strong>Exact Hash Check</strong><span>Byte-identical folder images</span></div></label>
           </div>
         </div>
         <div>
@@ -1297,7 +1301,13 @@
           const isManga = String(job.target_type).toLowerCase().includes('manga');
           const isDoujin = String(job.target_type).toLowerCase().includes('doujin');
           const targetTitle = isManga ? 'Manga / Manhwa' : (isDoujin ? 'Doujinshi' : 'Both Libraries');
-          const modeTitle = (job.mode === 'image') ? 'Visual Hashing' : 'Metadata (Fast)';
+          const modeTitles = {
+            name: 'Metadata (Fast)',
+            image: 'Name and Hash',
+            visual: 'Visual Similarity',
+            exact: 'Exact Hash Check'
+          };
+          const modeTitle = modeTitles[job.mode] || 'Metadata (Fast)';
 
           const pathsListHtml = (job.paths || []).map(p => `
             <div class="path-line truncate" title="${escapeHtml(p)}">${escapeHtml(p)}</div>

@@ -21,7 +21,7 @@ class ScanJobCreatePayload(BaseModel):
     name: str = Field(..., min_length=1, description="User-defined friendly name for the scan job")
     target_type: str = Field("manga", description="'manga', 'doujinshi', or 'all'")
     paths: List[str] = Field(..., min_items=1, description="One or more target directory paths to scan")
-    mode: str = Field("name", description="'name' or 'image'")
+    mode: str = Field("name", description="'name', 'image', 'visual', or 'exact'")
     description: Optional[str] = ""
     excluded_manga: Optional[List[str]] = Field(default_factory=list, description="Manga series names/titles to exclude from scan")
 

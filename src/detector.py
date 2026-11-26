@@ -329,3 +329,149 @@ def detect_doujinshi_duplicates(works: List[DoujinshiWork]) -> List[DuplicateGro
             )
 
     return duplicate_groups
+
+
+def _item_dict(item: Any) -> Dict[str, Any]:
+    if isinstance(item, dict):
+        return item
+    return item.to_dict()
+
+
+def _keeper_path(items: List[dict]) -> str:
+    best = max(items, key=lambda it: (it.get("page_count") or 0, it.get("file_size_bytes") or 0))
+    return best.get("file_path") or best.get("raw_name") or ""
+
+
+def _display_names(items: List[dict]) -> str:
+    names = [it.get("raw_name") or it.get("work_name") or "" for it in items]
+    joined = " · ".join(name for name in names if name)
+    return joined[:180]
+
+
+def detect_visual_duplicates(
+    items: List[Any],
+    target_type: str = "manga",
+    threshold: int = 12,
+    progress_callback=None,
+) -> List[DuplicateGroup]:
+    """
+    Group releases whose story pages look the same.
+    Chapter numbers and folder names are not used. Manga comparisons stay
+    inside one series; doujinshi comparisons cover the whole scan.
+    """
+    from src.image_hasher import cluster_by_perceptual_signature
+
+    def log(message: str, level: str = "HASH") -> None:
+        if progress_callback:
+            progress_callback(message, level)
+
+    if target_type == "manga":
+        pools: Dict[str, List[dict]] = defaultdict(list)
+        for item in items:
+            data = _item_dict(item)
+            pools[(data.get("series_name") or "").lower()].append(data)
+        pool_list = list(pools.values())
+        scope = "series"
+    else:
+        pool_list = [[_item_dict(item) for item in items]]
+        scope = "library"
+
+    groups: List[DuplicateGroup] = []
+    log(f"Visual similarity scan across {len(pool_list)} {scope} pool(s), ignoring names...", "HASH")
+
+    for pool in pool_list:
+        if len(pool) < 2:
+            continue
+        label = pool[0].get("series_name") or pool[0].get("work_name") or pool[0].get("raw_name") or "items"
+        log(f"Comparing {len(pool)} items in '{label}' by image similarity...", "HASH")
+        for members, dist, expl in cluster_by_perceptual_signature(pool, threshold):
+            if target_type == "manga":
+                title = members[0].get("series_name") or "Visual match"
+            else:
+                title = members[0].get("work_name") or members[0].get("raw_name") or "Visual match"
+            groups.append(
+                DuplicateGroup(
+                    group_id=f"visual_{uuid.uuid4().hex[:8]}",
+                    target_type=target_type,
+                    title=title,
+                    sub_title=_display_names(members) or "Visual similarity",
+                    category=DuplicateCategory.VISUAL_MATCH,
+                    items=members,
+                    recommendation=f"Artwork matches even though the names differ. [Visual Verification: {expl}]",
+                    recommended_keep_path=_keeper_path(members),
+                    hamming_distance=dist,
+                )
+            )
+            log(f"Visual match in '{label}': {len(members)} items, Hamming {dist}.", "SUCCESS")
+
+    log(
+        f"Visual similarity report: {len(groups)} groups.",
+        "SUCCESS" if groups else "WARN",
+    )
+    return groups
+
+
+def detect_exact_hash_duplicates(
+    items: List[Any],
+    target_type: str = "manga",
+    progress_callback=None,
+) -> List[DuplicateGroup]:
+    """
+    Group folders and archives whose image bytes are identical.
+    Names are ignored, and matches may span series.
+    """
+    from src.image_hasher import folder_content_fingerprint
+
+    def log(message: str, level: str = "HASH") -> None:
+        if progress_callback:
+            progress_callback(message, level)
+
+    log(f"Exact hash check on {len(items)} items...", "HASH")
+    buckets: Dict[str, List[dict]] = defaultdict(list)
+    unreadable = 0
+    for item in items:
+        data = _item_dict(item)
+        path = data.get("file_path") or ""
+        fingerprint = folder_content_fingerprint(path) if path else None
+        if not fingerprint:
+            unreadable += 1
+            continue
+        buckets[fingerprint].append(data)
+
+    groups: List[DuplicateGroup] = []
+    for members in buckets.values():
+        unique: List[dict] = []
+        seen = set()
+        for member in members:
+            path = member.get("file_path") or member.get("raw_name")
+            if path in seen:
+                continue
+            seen.add(path)
+            unique.append(member)
+        if len(unique) < 2:
+            continue
+
+        series_names = {m.get("series_name") for m in unique if m.get("series_name")}
+        if target_type == "manga" and len(series_names) == 1:
+            title = next(iter(series_names))
+        else:
+            title = unique[0].get("work_name") or unique[0].get("series_name") or unique[0].get("raw_name") or "Exact match"
+
+        groups.append(
+            DuplicateGroup(
+                group_id=f"exact_{uuid.uuid4().hex[:8]}",
+                target_type=target_type,
+                title=title,
+                sub_title="Exact hash",
+                category=DuplicateCategory.EXACT_DUPLICATE,
+                items=unique,
+                recommendation="Byte-identical image files. Safe to keep one copy.",
+                recommended_keep_path=_keeper_path(unique),
+            )
+        )
+
+    log(
+        f"Exact hash report: {len(groups)} groups. {unreadable} items had no readable images.",
+        "SUCCESS" if groups else "WARN",
+    )
+    return groups

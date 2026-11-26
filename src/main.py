@@ -15,7 +15,14 @@ from pathlib import Path
 
 from src.config import load_config, normalize_path
 from src.scanner import scan_manga_directory, scan_doujinshi_directory
-from src.detector import detect_manga_duplicates, detect_manga_partials, detect_doujinshi_duplicates, retain_visual_matches
+from src.detector import (
+    detect_manga_duplicates,
+    detect_manga_partials,
+    detect_doujinshi_duplicates,
+    detect_visual_duplicates,
+    detect_exact_hash_duplicates,
+    retain_visual_matches,
+)
 from src.parser import parse_tree_dump_lines
 from src.reporter import export_terminal, export_json, export_csv, export_html
 
@@ -37,18 +44,34 @@ def run_manga_job(args, cfg):
             print(f"[!] Path not found: {p}")
 
     print(f"[*] Discovered {len(chapters)} chapter items.")
-    print("[*] Running intra-series detection...")
 
-    duplicates = detect_manga_duplicates(chapters)
-    partials = detect_manga_partials(chapters, min_page_ratio=cfg.get("detection", {}).get("min_page_ratio", 0.60), check_mode=args.by)
-
-    if args.by == "image":
-        print("[*] Running image perceptual hash verification on duplicate chapter candidates...")
-        duplicates = retain_visual_matches(
-            duplicates,
-            threshold=12,
+    if args.by == "visual":
+        print("[*] Running visual similarity detection (chapter names ignored)...")
+        duplicates = detect_visual_duplicates(
+            chapters,
+            target_type="manga",
             progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
         )
+        partials = []
+    elif args.by == "exact":
+        print("[*] Running exact folder hash check...")
+        duplicates = detect_exact_hash_duplicates(
+            chapters,
+            target_type="manga",
+            progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+        )
+        partials = []
+    else:
+        print("[*] Running intra-series detection...")
+        duplicates = detect_manga_duplicates(chapters)
+        partials = detect_manga_partials(chapters, min_page_ratio=cfg.get("detection", {}).get("min_page_ratio", 0.60), check_mode=args.by)
+        if args.by == "image":
+            print("[*] Running image perceptual hash verification on duplicate chapter candidates...")
+            duplicates = retain_visual_matches(
+                duplicates,
+                threshold=12,
+                progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+            )
 
     # Export reports
     export_terminal(duplicates, partials, len(chapters))
@@ -78,17 +101,31 @@ def run_doujinshi_job(args, cfg):
             print(f"[!] Path not found: {p}")
 
     print(f"[*] Discovered {len(works)} doujinshi works across library.")
-    print("[*] Running cross-directory duplicate detection...")
 
-    duplicates = detect_doujinshi_duplicates(works)
-
-    if args.by == "image":
-        print("[*] Checking doujinshi name matches against page artwork...")
-        duplicates = retain_visual_matches(
-            duplicates,
-            threshold=12,
+    if args.by == "visual":
+        print("[*] Running visual similarity detection (names ignored)...")
+        duplicates = detect_visual_duplicates(
+            works,
+            target_type="doujinshi",
             progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
         )
+    elif args.by == "exact":
+        print("[*] Running exact folder hash check...")
+        duplicates = detect_exact_hash_duplicates(
+            works,
+            target_type="doujinshi",
+            progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+        )
+    else:
+        print("[*] Running cross-directory duplicate detection...")
+        duplicates = detect_doujinshi_duplicates(works)
+        if args.by == "image":
+            print("[*] Checking doujinshi name matches against page artwork...")
+            duplicates = retain_visual_matches(
+                duplicates,
+                threshold=12,
+                progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+            )
 
     export_terminal(duplicates, [], len(works))
     export_json(duplicates, [], str(output_dir / "doujinshi_duplicates.json"))
@@ -159,13 +196,13 @@ def main():
 
     # 1. Manga subcommand
     p_manga = subparsers.add_parser("manga", help="Intra-series manga duplicate & partial scanner")
-    p_manga.add_argument("--by", choices=["name", "image"], default="name", help="Detection modality (name or image)")
+    p_manga.add_argument("--by", choices=["name", "image", "visual", "exact"], default="name", help="Detection modality: name, image (name and hash), visual, or exact")
     p_manga.add_argument("--scan", action="append", dest="scan_paths", help="Scan path (can be repeated)")
     p_manga.add_argument("--output", help="Output directory for reports")
 
     # 2. Doujinshi subcommand
     p_doujin = subparsers.add_parser("doujinshi", help="Global cross-directory doujinshi duplicate scanner")
-    p_doujin.add_argument("--by", choices=["name", "image"], default="name", help="Detection modality (name or image)")
+    p_doujin.add_argument("--by", choices=["name", "image", "visual", "exact"], default="name", help="Detection modality: name, image (name and hash), visual, or exact")
     p_doujin.add_argument("--scan", action="append", dest="scan_paths", help="Scan path (can be repeated)")
     p_doujin.add_argument("--output", help="Output directory for reports")
 
