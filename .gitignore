@@ -59,6 +59,7 @@ Thumbs.db
 [Dd]esktop.ini
 
 # Output and report folders
+cache/
 reports/
 output/
 logs/

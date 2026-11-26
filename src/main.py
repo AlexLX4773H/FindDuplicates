@@ -23,8 +23,10 @@ from src.detector import (
     detect_visual_duplicates,
     detect_exact_hash_duplicates,
     detect_reference_duplicates,
+    detect_video_duplicates,
     retain_visual_matches,
 )
+from src.video_scanner import scan_video_tree
 from src.parser import parse_tree_dump_lines
 from src.reporter import export_terminal, export_json, export_csv, export_html
 
@@ -169,6 +171,42 @@ def run_doujinshi_job(args, cfg):
     print("[INFO] To review duplicates and resolve them, open the Web Dashboard at http://localhost:8765")
 
 
+def run_video_job(args, cfg):
+    output_dir = Path(args.output or cfg.get("output", {}).get("report_directory", "./reports")).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    scan_paths = [normalize_path(p) for p in args.scan_paths] if args.scan_paths else []
+    if not scan_paths:
+        print("[!] No scan paths specified. Use --scan <path>.")
+        sys.exit(1)
+
+    print(f"[*] Starting video near-duplicate scan across {len(scan_paths)} root path(s)...")
+    videos = []
+    for p in scan_paths:
+        if p.exists():
+            videos.extend(scan_video_tree(p, progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}")))
+        else:
+            print(f"[!] Path not found: {p}")
+
+    print(f"[*] Discovered {len(videos)} video files.")
+    try:
+        duplicates = detect_video_duplicates(
+            videos,
+            progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+        )
+    except RuntimeError as exc:
+        print(f"[!] {exc}")
+        sys.exit(1)
+
+    export_terminal(duplicates, [], len(videos))
+    export_json(duplicates, [], str(output_dir / "video_duplicates.json"))
+    export_csv(duplicates, str(output_dir / "video_duplicates.csv"))
+    export_html(duplicates, [], len(videos), str(output_dir / "video_duplicates.html"))
+    print(f"[+] Reports saved to: {output_dir}")
+    print("[INFO] Safety Guarantee: Scans run in strictly READ-ONLY mode. No files were modified, moved, or deleted.")
+    print("[INFO] To review duplicates and resolve them, open the Web Dashboard at http://localhost:8765")
+
+
 def run_parse_tree_job(args, cfg):
     target_file = Path(args.file).resolve()
     if not target_file.exists():
@@ -240,13 +278,18 @@ def main():
     p_doujin.add_argument("--reference", action="append", dest="reference_paths", help="Reference directory used to choose the copy to keep (can be repeated)")
     p_doujin.add_argument("--output", help="Output directory for reports")
 
-    # 3. Parse Tree subcommand
+    # 3. Video subcommand
+    p_video = subparsers.add_parser("video", help="Whole-tree near-duplicate video scanner (mp4, mkv, and similar)")
+    p_video.add_argument("--scan", action="append", dest="scan_paths", help="Video library root (can be repeated)")
+    p_video.add_argument("--output", help="Output directory for reports")
+
+    # 4. Parse Tree subcommand
     p_tree = subparsers.add_parser("parse-tree", help="Offline analyzer for tree dump text files")
     p_tree.add_argument("--file", required=True, help="Path to tree dump text file")
     p_tree.add_argument("--type", choices=["auto", "manga", "doujinshi"], default="auto", help="Structure type")
     p_tree.add_argument("--output", help="Output directory for reports")
 
-    # 4. Server subcommand
+    # 5. Server subcommand
     p_server = subparsers.add_parser("server", help="Launch interactive web UI dashboard")
     p_server.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     p_server.add_argument("--port", type=int, default=8765, help="Port (default: 8765)")
@@ -258,6 +301,8 @@ def main():
         run_manga_job(args, cfg)
     elif args.command == "doujinshi":
         run_doujinshi_job(args, cfg)
+    elif args.command == "video":
+        run_video_job(args, cfg)
     elif args.command == "parse-tree":
         run_parse_tree_job(args, cfg)
     elif args.command == "server":

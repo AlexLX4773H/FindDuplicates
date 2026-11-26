@@ -42,7 +42,8 @@ def export_csv(duplicates: List[DuplicateGroup], output_path: str) -> None:
         writer = csv.writer(f)
         writer.writerow([
             "Group ID", "Target Type", "Title", "Sub Title", "Category",
-            "Item Name", "Group/Scanlator", "Pages", "Path", "Is Recommended Keeper"
+            "Item Name", "Group/Scanlator", "Pages", "Path", "Is Recommended Keeper",
+            "Duration Seconds", "Resolution"
         ])
         for g in duplicates:
             rec_path = g.recommended_keep_path
@@ -58,7 +59,9 @@ def export_csv(duplicates: List[DuplicateGroup], output_path: str) -> None:
                     it.get("scanlator_group") or it.get("scanlator", ""),
                     it.get("page_count", 0),
                     it.get("file_path", ""),
-                    "YES" if is_keeper else "NO"
+                    "YES" if is_keeper else "NO",
+                    it.get("duration_seconds", ""),
+                    it.get("resolution", ""),
                 ])
 
 
@@ -143,6 +146,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button onclick="setFilter('all')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white">All (__DUPES_COUNT__)</button>
         <button onclick="setFilter('manga')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">Manga</button>
         <button onclick="setFilter('doujinshi')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">Doujinshi</button>
+        <button onclick="setFilter('video')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">Videos</button>
         <button onclick="setFilter('partials')" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">Partials (__PARTIALS_COUNT__)</button>
       </div>
     </div>
@@ -185,6 +189,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const filtered = duplicates.filter(g => {
         if (currentFilter === 'manga' && g.target_type !== 'manga') return false;
         if (currentFilter === 'doujinshi' && g.target_type !== 'doujinshi') return false;
+        if (currentFilter === 'video' && g.target_type !== 'video') return false;
         if (query) {
           const titleMatch = g.title.toLowerCase().includes(query);
           const subMatch = g.sub_title.toLowerCase().includes(query);
@@ -220,6 +225,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <div class="flex items-center gap-3">
                 <span class="px-2 py-1 rounded bg-slate-800 text-slate-300">Group: ${group}</span>
                 ${it.page_count ? `<span class="px-2 py-1 rounded bg-slate-800 text-slate-300">${it.page_count} pages</span>` : ''}
+                ${it.duration_seconds ? `<span class="px-2 py-1 rounded bg-slate-800 text-slate-300">${Math.round(it.duration_seconds)}s</span>` : ''}
+                ${it.resolution ? `<span class="px-2 py-1 rounded bg-slate-800 text-slate-300">${it.resolution}</span>` : ''}
               </div>
             </div>
           `;
@@ -228,7 +235,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         el.innerHTML = `
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
             <div>
-              <span class="text-xs font-semibold px-2 py-0.5 rounded ${g.target_type === 'manga' ? 'bg-violet-900/50 text-violet-300 border border-violet-700' : 'bg-pink-900/50 text-pink-300 border border-pink-700'}">${g.target_type.toUpperCase()}</span>
+              <span class="text-xs font-semibold px-2 py-0.5 rounded ${g.target_type === 'manga' ? 'bg-violet-900/50 text-violet-300 border border-violet-700' : (g.target_type === 'video' ? 'bg-cyan-900/50 text-cyan-300 border border-cyan-700' : 'bg-pink-900/50 text-pink-300 border border-pink-700')}">${g.target_type.toUpperCase()}</span>
               <h3 class="text-lg font-bold text-slate-100 inline-block ml-2">${g.title} <span class="text-slate-400 font-normal">(${g.sub_title})</span></h3>
             </div>
             <span class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">${g.category}</span>

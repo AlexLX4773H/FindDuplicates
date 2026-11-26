@@ -636,3 +636,95 @@ def detect_reference_duplicates(
         "SUCCESS" if groups else "WARN",
     )
     return groups
+
+
+def _video_keeper_path(items: List[dict]) -> str:
+    """Highest resolution, then the largest file."""
+    def score(item: dict) -> Tuple[int, int]:
+        pixels = int(item.get("width") or 0) * int(item.get("height") or 0)
+        return pixels, int(item.get("file_size_bytes") or 0)
+
+    best = max(items, key=score)
+    return best.get("file_path") or best.get("raw_name") or ""
+
+
+def _public_video_item(item: dict) -> dict:
+    """Drop the raw frame hashes before the item is stored in a report."""
+    return {
+        "raw_name": item.get("raw_name") or Path(item.get("file_path") or "").name,
+        "file_path": item.get("file_path") or "",
+        "file_size_bytes": int(item.get("file_size_bytes") or 0),
+        "duration_seconds": float(item.get("duration_seconds") or item.get("duration") or 0),
+        "width": int(item.get("width") or 0),
+        "height": int(item.get("height") or 0),
+        "resolution": item.get("resolution") or "",
+        "source_root": item.get("source_root") or "",
+    }
+
+
+def detect_video_duplicates(
+    items: List[dict],
+    cache_dir: Optional[Path] = None,
+    progress_callback=None,
+) -> List[DuplicateGroup]:
+    """
+    Group near-duplicate videos across the whole tree.
+    Names are ignored. Frame hashes must be very similar and durations must be close.
+    """
+    from src.cache_store import resolve_cache_directory
+    from src.video_hasher import FfmpegNotFoundError, cluster_video_records, ensure_ffmpeg, fingerprint_item
+
+    def log(message: str, level: str = "HASH") -> None:
+        if progress_callback:
+            progress_callback(message, level)
+
+    try:
+        ensure_ffmpeg()
+    except FfmpegNotFoundError as exc:
+        log(str(exc), "ERROR")
+        raise
+
+    store = cache_dir if cache_dir is not None else resolve_cache_directory()
+    log(f"Fingerprinting {len(items)} videos. Cache: {store}", "HASH")
+    fingerprinted: List[dict] = []
+    cached = 0
+    unreadable = 0
+    for index, item in enumerate(items, 1):
+        record = fingerprint_item(item, store)
+        if not record:
+            unreadable += 1
+            continue
+        if record.get("cache_hit"):
+            cached += 1
+        fingerprinted.append(record)
+        if index == 1 or index % 25 == 0 or index == len(items):
+            log(f"Fingerprinted {index}/{len(items)} videos ({cached} from cache, {unreadable} unreadable).", "HASH")
+
+    groups: List[DuplicateGroup] = []
+    for members, dist in cluster_video_records(fingerprinted):
+        public = [_public_video_item(member) for member in members]
+        keeper = _video_keeper_path(public)
+        title = Path(keeper).stem if keeper else (public[0].get("raw_name") or "Video match")
+        groups.append(
+            DuplicateGroup(
+                group_id=f"video_{uuid.uuid4().hex[:8]}",
+                target_type="video",
+                title=title,
+                sub_title="Near-duplicate video",
+                category=DuplicateCategory.VISUAL_MATCH,
+                items=public,
+                recommendation=(
+                    f"Sampled frames match across the library. "
+                    f"[Visual Verification: Hamming distance: {dist}]"
+                ),
+                recommended_keep_path=keeper,
+                hamming_distance=dist,
+            )
+        )
+        log(f"Video match: {len(public)} files, mean Hamming {dist}.", "SUCCESS")
+
+    log(
+        f"Video similarity report: {len(groups)} groups. {unreadable} files could not be fingerprinted.",
+        "SUCCESS" if groups else "WARN",
+    )
+    return groups

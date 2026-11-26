@@ -115,7 +115,9 @@
     .nav-item.is-active .nav-count { background: rgba(212,175,55,0.20); color: var(--gold-bright); }
     .telemetry-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 12px 8px; margin-bottom: 8px; }
     .telemetry-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 0 6px 8px; font-weight: 600; }
-    .telemetry-grid { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
+    .telemetry-grid { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; }
+    .settings-card { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px; background: var(--bg-surface); max-width: 640px; }
+    .settings-stat { font-family: var(--font-mono); font-size: 13px; color: var(--text-primary); word-break: break-all; }
     .telemetry-cell { position: relative; padding: 2px 4px; }
     .telemetry-cell:not(:last-child)::after { content: ''; position: absolute; right: 0; top: 4px; bottom: 4px; width: 1px; background: var(--border-subtle); }
     .telemetry-val { display: block; font-family: var(--font-mono); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -401,6 +403,12 @@
             Offline Tree Dumps
           </span>
         </button>
+        <button type="button" onclick="switchTab('settings')" id="tab-settings" class="nav-item tab-btn">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>
+            Settings
+          </span>
+        </button>
       </nav>
 
       <div class="telemetry-card">
@@ -409,6 +417,7 @@
           <div class="telemetry-cell"><span id="statScanned" class="telemetry-val">0</span><span class="telemetry-lbl">Scanned</span></div>
           <div class="telemetry-cell"><span id="statMangaDupes" class="telemetry-val gold">0</span><span class="telemetry-lbl">Manga</span></div>
           <div class="telemetry-cell"><span id="statDoujinDupes" class="telemetry-val gold">0</span><span class="telemetry-lbl">Doujinshi</span></div>
+          <div class="telemetry-cell"><span id="statVideoDupes" class="telemetry-val gold">0</span><span class="telemetry-lbl">Videos</span></div>
         </div>
       </div>
 
@@ -550,9 +559,10 @@
               </div>
               <div>
                 <label class="field-label" for="jobTargetTypeSelect">Target Library Type</label>
-                <select id="jobTargetTypeSelect" class="field">
+                <select id="jobTargetTypeSelect" class="field" onchange="syncLibraryJobFields()">
                   <option value="manga">Manga / Manhwa (Intra-Series Scoped)</option>
                   <option value="doujinshi">Doujinshi (Global Cross-Directory Scoped)</option>
+                  <option value="video">Videos (Near-Duplicate, Whole Tree)</option>
                   <option value="all">Both Libraries (Comprehensive Full Scan)</option>
                 </select>
               </div>
@@ -576,12 +586,13 @@
             <div class="form-grid">
               <div>
                 <label class="field-label" for="jobModeSelect">Detection Modality</label>
-                <select id="jobModeSelect" class="field" onchange="syncReferenceJobFields()">
+                <select id="jobModeSelect" class="field" onchange="syncLibraryJobFields()">
                   <option value="name">Name &amp; Metadata (Fast)</option>
                   <option value="image">Name and Hash</option>
                   <option value="visual">Visual Similarity</option>
                   <option value="exact">Exact Hash Check</option>
                   <option value="reference">Reference Position</option>
+                  <option value="similar">Similar Video</option>
                 </select>
               </div>
               <div>
@@ -589,7 +600,7 @@
                 <input type="text" id="jobDescInput" class="field" placeholder="Optional notes for this job...">
               </div>
             </div>
-            <div>
+            <div id="jobExclusionsBlock">
               <label class="field-label" for="jobExclusionsInput">Manga Exclusion List (one series per line)</label>
               <textarea id="jobExclusionsInput" class="field" rows="2" placeholder="Flag Capture in the First Move"></textarea>
               <p class="hint">Case-insensitive title matching. Matching manga series are skipped.</p>
@@ -609,6 +620,30 @@
             <div id="jobsListContainer" class="card-grid">
               <div class="empty-state">Loading saved scan jobs...</div>
             </div>
+          </div>
+        </div>
+
+        <div id="settingsView" class="panel hidden">
+          <div class="panel-head">
+            <div>
+              <h2>Settings</h2>
+              <p class="lead">Video scans cache frame fingerprints so unchanged files are not decoded again. Clearing the cache does not delete reports or scan jobs.</p>
+            </div>
+            <button onclick="loadCacheSettings()" class="btn-ghost">Refresh</button>
+          </div>
+          <div class="settings-card stack">
+            <div>
+              <div class="field-label">Cache directory</div>
+              <div id="cachePathText" class="settings-stat">Loading...</div>
+            </div>
+            <div class="inline-actions">
+              <span class="chip">Files <strong id="cacheFileCount">0</strong></span>
+              <span class="chip">Size <strong id="cacheSizeText">0 B</strong></span>
+            </div>
+            <div class="form-actions">
+              <button type="button" onclick="clearCaches()" id="btnClearCache" class="btn btn-danger-ghost">Clear caches</button>
+            </div>
+            <p id="cacheSettingsMessage" class="hint"></p>
           </div>
         </div>
 
@@ -644,6 +679,7 @@
               <button onclick="setReportFilter('all')" id="subfilter-all" class="filter-tab subfilter-btn is-active">All Duplicates <span id="subfilterCountAll" class="nav-count">0</span></button>
               <button onclick="setReportFilter('manga')" id="subfilter-manga" class="filter-tab subfilter-btn">Manga <span id="subfilterCountManga" class="nav-count">0</span></button>
               <button onclick="setReportFilter('doujinshi')" id="subfilter-doujinshi" class="filter-tab subfilter-btn">Doujinshi <span id="subfilterCountDoujinshi" class="nav-count">0</span></button>
+              <button onclick="setReportFilter('video')" id="subfilter-video" class="filter-tab subfilter-btn">Videos <span id="subfilterCountVideo" class="nav-count">0</span></button>
               <button onclick="setReportFilter('partials')" id="subfilter-partials" class="filter-tab subfilter-btn">Partials / Splits <span id="subfilterCountPartials" class="nav-count">0</span></button>
             </div>
             <div class="filter-actions">
@@ -675,10 +711,11 @@
       <div class="stack">
         <div>
           <span class="field-label">Scan Target Library</span>
-          <div class="choice-grid cols-3">
+          <div class="choice-grid cols-2">
             <label class="choice"><input type="radio" name="scanTarget" value="manga" checked><div><strong>Manga / Manhwa</strong><span>Intra-Series Scope</span></div></label>
             <label class="choice"><input type="radio" name="scanTarget" value="doujinshi"><div><strong>Doujinshi</strong><span>Global Cross-Directory</span></div></label>
-            <label class="choice"><input type="radio" name="scanTarget" value="all"><div><strong>Both Libraries</strong><span>Full Comprehensive Scan</span></div></label>
+            <label class="choice"><input type="radio" name="scanTarget" value="video"><div><strong>Videos</strong><span>Whole tree, near-duplicates</span></div></label>
+            <label class="choice"><input type="radio" name="scanTarget" value="all"><div><strong>Both Libraries</strong><span>Manga and Doujinshi</span></div></label>
           </div>
         </div>
         <div>
@@ -689,6 +726,7 @@
             <label class="choice"><input type="radio" name="scanMode" value="visual"><div><strong>Visual Similarity</strong><span>Image similarity only, names ignored</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="exact"><div><strong>Exact Hash Check</strong><span>Byte-identical folder images</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="reference"><div><strong>Reference Position</strong><span>Exact hash, keep the reference relative path</span></div></label>
+            <label class="choice"><input type="radio" name="scanMode" value="similar"><div><strong>Similar Video</strong><span>Sampled frames, names ignored</span></div></label>
           </div>
         </div>
         <div>
@@ -1009,6 +1047,8 @@
         document.getElementById('statScanned').innerText = data.total_scanned;
         document.getElementById('statMangaDupes').innerText = data.manga_duplicates_count;
         document.getElementById('statDoujinDupes').innerText = data.doujinshi_duplicates_count;
+        const statVideo = document.getElementById('statVideoDupes');
+        if (statVideo) statVideo.innerText = data.video_duplicates_count || 0;
 
         if (data.loaded_report_name) {
           updateActiveReportLinks(data.loaded_report_name);
@@ -1073,6 +1113,7 @@
     function updateReportCounters() {
       const mangaCount = duplicatesData.filter(g => g.target_type === 'manga').length;
       const doujinCount = duplicatesData.filter(g => g.target_type === 'doujinshi').length;
+      const videoCount = duplicatesData.filter(g => g.target_type === 'video').length;
       const totalDupes = duplicatesData.length;
       const partialsCount = partialsData.length;
 
@@ -1087,6 +1128,9 @@
 
       const countDoujin = document.getElementById('subfilterCountDoujinshi');
       if (countDoujin) countDoujin.innerText = doujinCount;
+
+      const countVideo = document.getElementById('subfilterCountVideo');
+      if (countVideo) countVideo.innerText = videoCount;
 
       const countPartials = document.getElementById('subfilterCountPartials');
       if (countPartials) countPartials.innerText = partialsCount;
@@ -1310,15 +1354,17 @@
           const card = document.createElement('div');
           card.className = 'job-card';
 
-          const isManga = String(job.target_type).toLowerCase().includes('manga');
+          const isManga = String(job.target_type).toLowerCase() === 'manga';
           const isDoujin = String(job.target_type).toLowerCase().includes('doujin');
-          const targetTitle = isManga ? 'Manga / Manhwa' : (isDoujin ? 'Doujinshi' : 'Both Libraries');
+          const isVideo = String(job.target_type).toLowerCase() === 'video';
+          const targetTitle = isManga ? 'Manga / Manhwa' : (isDoujin ? 'Doujinshi' : (isVideo ? 'Videos' : 'Both Libraries'));
           const modeTitles = {
             name: 'Metadata (Fast)',
             image: 'Name and Hash',
             visual: 'Visual Similarity',
             exact: 'Exact Hash Check',
-            reference: 'Reference Position'
+            reference: 'Reference Position',
+            similar: 'Similar Video'
           };
           const modeTitle = modeTitles[job.mode] || 'Metadata (Fast)';
           const isReference = job.mode === 'reference';
@@ -1411,26 +1457,52 @@
       }
     }
 
-    function syncReferenceJobFields() {
-      const mode = document.getElementById('jobModeSelect').value;
-      const block = document.getElementById('jobReferencePathsBlock');
+    function syncLibraryJobFields() {
+      const modeSelect = document.getElementById('jobModeSelect');
       const target = document.getElementById('jobTargetTypeSelect');
+      const block = document.getElementById('jobReferencePathsBlock');
       const pathsHint = document.getElementById('jobPathsHint');
-      const isReference = mode === 'reference';
-      if (block) block.classList.toggle('hidden', !isReference);
-      if (target) {
-        if (isReference) {
-          target.value = 'doujinshi';
-          target.disabled = true;
-        } else {
-          target.disabled = false;
-        }
+      const exclusions = document.getElementById('jobExclusionsBlock');
+      if (!modeSelect || !target) return;
+
+      Array.from(modeSelect.options).forEach(opt => { opt.disabled = false; });
+      Array.from(target.options).forEach(opt => { opt.disabled = false; });
+      modeSelect.disabled = false;
+      target.disabled = false;
+
+      if (target.value === 'video') {
+        modeSelect.value = 'similar';
+      } else if (modeSelect.value === 'similar') {
+        modeSelect.value = 'name';
       }
+      if (modeSelect.value === 'reference') {
+        target.value = 'doujinshi';
+      }
+
+      const isReference = modeSelect.value === 'reference';
+      const isVideo = target.value === 'video';
+      modeSelect.disabled = isVideo;
+      target.disabled = isReference;
+      Array.from(modeSelect.options).forEach(opt => {
+        opt.disabled = isVideo ? opt.value !== 'similar' : (opt.value === 'similar');
+      });
+      Array.from(target.options).forEach(opt => {
+        if (isReference) opt.disabled = opt.value !== 'doujinshi';
+        else opt.disabled = false;
+      });
+      if (block) block.classList.toggle('hidden', !isReference);
+      if (exclusions) exclusions.classList.toggle('hidden', isVideo);
       if (pathsHint) {
         pathsHint.textContent = isReference
           ? 'Compare directories. Exact duplicates are found here. The copy whose relative path matches the reference library is kept.'
-          : 'Multiple paths are scanned sequentially in one job.';
+          : (isVideo
+            ? 'Every subdirectory is scanned. Near-duplicate videos are grouped even when the file names differ.'
+            : 'Multiple paths are scanned sequentially in one job.');
       }
+    }
+
+    function syncReferenceJobFields() {
+      syncLibraryJobFields();
     }
 
     function cancelJobEdit() {
@@ -1444,7 +1516,7 @@
       document.getElementById('jobExclusionsInput').value = '';
       document.getElementById('jobFormTitle').innerHTML = '<span>⚡ Create New Scan Job</span>';
       document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Save Job</span>';
-      syncReferenceJobFields();
+      syncLibraryJobFields();
       document.getElementById('createJobFormPanel').classList.add('hidden');
     }
 
@@ -1459,7 +1531,7 @@
       document.getElementById('jobModeSelect').value = job.mode || 'name';
       document.getElementById('jobDescInput').value = job.description || '';
       document.getElementById('jobExclusionsInput').value = (job.excluded_manga || []).join('\n');
-      syncReferenceJobFields();
+      syncLibraryJobFields();
       document.getElementById('jobFormTitle').innerHTML = `<span>✏️ Edit Scan Job: ${escapeHtml(job.name)}</span>`;
       document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Update Job</span>';
       toggleCreateJobForm(true);
@@ -1468,9 +1540,10 @@
     async function saveScanJob(andRun = false) {
       const editId = document.getElementById('editJobId').value;
       const name = document.getElementById('jobNameInput').value.trim();
-      const target_type = document.getElementById('jobTargetTypeSelect').value;
+      let target_type = document.getElementById('jobTargetTypeSelect').value;
       const rawPaths = document.getElementById('jobPathsInput').value;
-      const mode = document.getElementById('jobModeSelect').value;
+      let mode = document.getElementById('jobModeSelect').value;
+      if (target_type === 'video') mode = 'similar';
       const description = document.getElementById('jobDescInput').value.trim();
       const rawExclusions = document.getElementById('jobExclusionsInput').value;
       const excluded_manga = rawExclusions.split('\n').map(p => p.trim()).filter(p => p.length > 0);
@@ -1503,7 +1576,7 @@
           paths,
           mode,
           description,
-          excluded_manga,
+          excluded_manga: target_type === 'video' ? [] : excluded_manga,
           reference_paths
         };
 
@@ -1587,7 +1660,7 @@
     }
 
     function switchTab(tab) {
-      if (['manga', 'doujinshi', 'partials'].includes(tab)) {
+      if (['manga', 'doujinshi', 'video', 'partials'].includes(tab)) {
         reportSubFilter = tab;
         tab = 'report';
       }
@@ -1601,33 +1674,32 @@
       const samplesView = document.getElementById('samplesView');
       const jobsView = document.getElementById('jobsView');
       const reportsView = document.getElementById('reportsView');
+      const settingsView = document.getElementById('settingsView');
       const reportViewContainer = document.getElementById('reportViewContainer');
       const activeViewLabel = document.getElementById('activeViewLabel');
 
+      if (samplesView) samplesView.classList.add('hidden');
+      if (jobsView) jobsView.classList.add('hidden');
+      if (reportsView) reportsView.classList.add('hidden');
+      if (settingsView) settingsView.classList.add('hidden');
+      if (reportViewContainer) reportViewContainer.classList.add('hidden');
+
       if (tab === 'samples') {
         samplesView.classList.remove('hidden');
-        if (jobsView) jobsView.classList.add('hidden');
-        if (reportsView) reportsView.classList.add('hidden');
-        if (reportViewContainer) reportViewContainer.classList.add('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Offline Tree Dumps';
       } else if (tab === 'jobs') {
         if (jobsView) jobsView.classList.remove('hidden');
-        samplesView.classList.add('hidden');
-        if (reportsView) reportsView.classList.add('hidden');
-        if (reportViewContainer) reportViewContainer.classList.add('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Scan Jobs Manager';
         loadScanJobs();
       } else if (tab === 'reports') {
         if (reportsView) reportsView.classList.remove('hidden');
-        samplesView.classList.add('hidden');
-        if (jobsView) jobsView.classList.add('hidden');
-        if (reportViewContainer) reportViewContainer.classList.add('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Saved Reports & History';
         loadReportsAndHistory();
+      } else if (tab === 'settings') {
+        if (settingsView) settingsView.classList.remove('hidden');
+        if (activeViewLabel) activeViewLabel.innerText = 'Settings';
+        loadCacheSettings();
       } else {
-        samplesView.classList.add('hidden');
-        if (jobsView) jobsView.classList.add('hidden');
-        if (reportsView) reportsView.classList.add('hidden');
         if (reportViewContainer) reportViewContainer.classList.remove('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Report Resolution Window';
         updateSubfilterButtons();
@@ -1642,7 +1714,7 @@
     }
 
     function updateSubfilterButtons() {
-      const filters = ['all', 'manga', 'doujinshi', 'partials'];
+      const filters = ['all', 'manga', 'doujinshi', 'video', 'partials'];
       filters.forEach(f => {
         const btn = document.getElementById(`subfilter-${f}`);
         if (!btn) return;
@@ -1678,6 +1750,61 @@
         });
         renderActiveView();
         updateActionBadge();
+      }
+    }
+
+    function formatDuration(seconds) {
+      const total = Math.round(Number(seconds));
+      if (!isFinite(total) || total < 0) return '';
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const secs = total % 60;
+      if (hours) return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+      return minutes + ':' + String(secs).padStart(2, '0');
+    }
+
+    function formatBytes(size) {
+      const n = Number(size) || 0;
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+      return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    async function loadCacheSettings() {
+      const message = document.getElementById('cacheSettingsMessage');
+      try {
+        const res = await fetch('/api/settings/cache');
+        const data = await res.json();
+        const pathEl = document.getElementById('cachePathText');
+        const countEl = document.getElementById('cacheFileCount');
+        const sizeEl = document.getElementById('cacheSizeText');
+        if (pathEl) pathEl.textContent = data.path || '';
+        if (countEl) countEl.textContent = data.file_count || 0;
+        if (sizeEl) sizeEl.textContent = formatBytes(data.size_bytes);
+        if (message && !message.dataset.sticky) message.textContent = data.exists ? '' : 'Cache directory will be created on the first video scan.';
+      } catch (err) {
+        if (message) message.textContent = 'Could not read the cache: ' + err.message;
+      }
+    }
+
+    async function clearCaches() {
+      const message = document.getElementById('cacheSettingsMessage');
+      if (!confirm('Clear all cached fingerprints? Reports and scan jobs are kept. The next video scan will decode files again.')) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/settings/cache/clear', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          if (message) message.textContent = data.error || 'Could not clear the cache.';
+          return;
+        }
+        if (message) message.textContent = `Cleared ${data.deleted_files || 0} cached files (${formatBytes(data.freed_bytes)}).`;
+        await loadCacheSettings();
+        if (message) message.textContent = `Cleared ${data.deleted_files || 0} cached files (${formatBytes(data.freed_bytes)}).`;
+      } catch (err) {
+        if (message) message.textContent = 'Could not clear the cache: ' + err.message;
       }
     }
 
@@ -1739,6 +1866,7 @@
       filteredGroups = duplicatesData.filter(g => {
         if (reportSubFilter === 'manga' && g.target_type !== 'manga') return false;
         if (reportSubFilter === 'doujinshi' && g.target_type !== 'doujinshi') return false;
+        if (reportSubFilter === 'video' && g.target_type !== 'video') return false;
         if (query) {
           const tMatch = (g.title || '').toLowerCase().includes(query);
           const sMatch = (g.sub_title || '').toLowerCase().includes(query);
@@ -1802,6 +1930,8 @@
                 <div class="meta-line">
                   <span>Group: <strong>${escapeHtml(group)}</strong></span>
                   ${it.page_count ? `<span>Pages: <strong>${it.page_count}</strong></span>` : ''}
+                  ${it.duration_seconds ? `<span>Duration: <strong>${formatDuration(it.duration_seconds)}</strong></span>` : ''}
+                  ${it.resolution ? `<span>Resolution: <strong>${escapeHtml(it.resolution)}</strong></span>` : ''}
                   ${it.relative_path ? `<span>Position: <strong>${escapeHtml(it.relative_path)}</strong></span>` : ''}
                   ${it.volume_root ? `<span>Vol: <strong>${escapeHtml(it.volume_root)}</strong></span>` : ''}
                 </div>
@@ -1819,7 +1949,7 @@
           `;
         }).join('');
 
-        const typeClass = g.target_type === 'manga' ? 'chip-gold' : 'chip-rose';
+        const typeClass = g.target_type === 'manga' ? 'chip-gold' : (g.target_type === 'doujinshi' ? 'chip-rose' : '');
         card.innerHTML = `
           <div class="group-head">
             <div>
@@ -1877,25 +2007,58 @@
     // =========================================================================
     // SCAN MODAL LOGIC (JOB RUNNER - REPORT CREATION ONLY)
     // =========================================================================
-    function syncScanReferenceMode() {
-      const selected = document.querySelector('input[name="scanMode"]:checked');
-      const mode = selected ? selected.value : 'name';
+    function syncScanReferenceMode(source) {
+      const modeEl = document.querySelector('input[name="scanMode"]:checked');
+      const targetEl = document.querySelector('input[name="scanTarget"]:checked');
+      let mode = modeEl ? modeEl.value : 'name';
+      let target = targetEl ? targetEl.value : 'manga';
+
+      if (source === 'target' && target === 'video') {
+        mode = 'similar';
+        const similar = document.querySelector('input[name="scanMode"][value="similar"]');
+        if (similar) similar.checked = true;
+      } else if (source === 'target' && target !== 'video' && mode === 'similar') {
+        mode = 'name';
+        const nameMode = document.querySelector('input[name="scanMode"][value="name"]');
+        if (nameMode) nameMode.checked = true;
+      } else if (source === 'target' && target !== 'doujinshi' && mode === 'reference') {
+        mode = 'name';
+        const nameMode = document.querySelector('input[name="scanMode"][value="name"]');
+        if (nameMode) nameMode.checked = true;
+      }
+      if (source === 'mode' && mode === 'similar') {
+        target = 'video';
+        const video = document.querySelector('input[name="scanTarget"][value="video"]');
+        if (video) video.checked = true;
+      } else if (source === 'mode' && mode === 'reference') {
+        target = 'doujinshi';
+        const doujin = document.querySelector('input[name="scanTarget"][value="doujinshi"]');
+        if (doujin) doujin.checked = true;
+      } else if (source === 'mode' && mode !== 'similar' && target === 'video') {
+        target = 'manga';
+        const manga = document.querySelector('input[name="scanTarget"][value="manga"]');
+        if (manga) manga.checked = true;
+      }
+
       const isReference = mode === 'reference';
+      const isVideo = target === 'video' || mode === 'similar';
       const block = document.getElementById('scanReferencePathsBlock');
       const label = document.getElementById('scanPathsLabel');
       if (block) block.classList.toggle('hidden', !isReference);
       if (label) {
         label.textContent = isReference
           ? 'Compare Directories (one path per line)'
-          : 'Target Scan Directories (one path per line)';
+          : (isVideo ? 'Video Directories (one path per line)' : 'Target Scan Directories (one path per line)');
       }
       document.querySelectorAll('input[name="scanTarget"]').forEach(r => {
-        if (isReference) {
-          r.checked = r.value === 'doujinshi';
-          r.disabled = r.value !== 'doujinshi';
-        } else {
-          r.disabled = false;
-        }
+        if (isVideo) r.disabled = r.value !== 'video';
+        else if (isReference) r.disabled = r.value !== 'doujinshi';
+        else r.disabled = false;
+      });
+      document.querySelectorAll('input[name="scanMode"]').forEach(r => {
+        if (isVideo) r.disabled = r.value !== 'similar';
+        else if (isReference) r.disabled = r.value !== 'reference';
+        else r.disabled = r.value === 'similar';
       });
     }
 
@@ -1918,6 +2081,8 @@
           pathsBox.value = '/sg2b/Share2sgb/Manga';
         } else if (target === 'doujinshi') {
           pathsBox.value = '/media/devmon/L500/Vere NewFolder';
+        } else if (target === 'video') {
+          pathsBox.value = '';
         } else {
           pathsBox.value = '/sg2b/Share2sgb/Manga\n/media/devmon/L500/Vere NewFolder';
         }
@@ -1927,12 +2092,13 @@
     document.querySelectorAll('input[name="scanTarget"]').forEach(r => {
       r.addEventListener('change', (e) => {
         updateDefaultScanPathsForTarget(e.target.value);
+        syncScanReferenceMode('target');
       });
     });
 
     document.querySelectorAll('input[name="scanMode"]').forEach(r => {
       r.addEventListener('change', () => {
-        syncScanReferenceMode();
+        syncScanReferenceMode('mode');
       });
     });
 
@@ -1984,7 +2150,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            target: mode === 'reference' ? 'doujinshi' : target,
+            target: mode === 'reference' ? 'doujinshi' : (mode === 'similar' ? 'video' : target),
             mode: mode,
             paths: rawPaths,
             reference_paths: mode === 'reference' ? referencePaths : []
@@ -2238,6 +2404,8 @@
     document.getElementById('searchInput').addEventListener('input', renderActiveView);
 
     // Initial polling & setup
+    syncLibraryJobFields();
+    syncScanReferenceMode();
     fetchState();
     loadData();
     loadReportsAndHistory();

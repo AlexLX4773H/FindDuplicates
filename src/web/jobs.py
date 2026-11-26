@@ -19,9 +19,9 @@ from src.config import load_config, normalize_path
 
 class ScanJobCreatePayload(BaseModel):
     name: str = Field(..., min_length=1, description="User-defined friendly name for the scan job")
-    target_type: str = Field("manga", description="'manga', 'doujinshi', or 'all'")
+    target_type: str = Field("manga", description="'manga', 'doujinshi', 'video', or 'all'")
     paths: List[str] = Field(..., min_items=1, description="Compare directories. For a reference job these are the folders to clean.")
-    mode: str = Field("name", description="'name', 'image', 'visual', 'exact', or 'reference'")
+    mode: str = Field("name", description="'name', 'image', 'visual', 'exact', 'reference', or 'similar'")
     description: Optional[str] = ""
     excluded_manga: Optional[List[str]] = Field(default_factory=list, description="Manga series names/titles to exclude from scan")
     reference_paths: Optional[List[str]] = Field(default_factory=list, description="Canonical directories used to decide which exact copy to keep")
@@ -54,6 +54,20 @@ def _path_contains(parent_key: str, child_key: str) -> bool:
         return True
     prefix = parent_key.rstrip("\\/") + os.sep
     return child_key.startswith(prefix)
+
+
+def normalize_job_mode(target_type: str, mode: str) -> tuple:
+    """
+    Video jobs always use similar-frame matching.
+    Similar mode is not valid for manga or doujinshi.
+    """
+    target = (target_type or "").strip().lower()
+    selected = (mode or "").strip().lower()
+    if target == "video":
+        return target, "similar"
+    if selected == "similar":
+        raise ValueError("Similar video mode is only available for the Videos library.")
+    return target, selected
 
 
 def validate_reference_directories(
@@ -181,8 +195,7 @@ class ScanJobManager:
         if not clean_paths:
             raise ValueError("At least one valid scan directory path is required.")
 
-        mode = payload.mode.strip().lower()
-        target_type = payload.target_type.strip().lower()
+        target_type, mode = normalize_job_mode(payload.target_type, payload.mode)
         clean_refs = validate_reference_directories(target_type, mode, clean_paths, payload.reference_paths)
 
         job_slug = re.sub(r"[^a-zA-Z0-9]+", "_", payload.name.strip().lower()).strip("_")
@@ -232,6 +245,10 @@ class ScanJobManager:
                 target_job["paths"] = clean
         if payload.mode is not None and payload.mode.strip():
             target_job["mode"] = payload.mode.strip().lower()
+        target_job["target_type"], target_job["mode"] = normalize_job_mode(
+            target_job.get("target_type", ""),
+            target_job.get("mode", ""),
+        )
         if payload.description is not None:
             target_job["description"] = payload.description.strip()
         if payload.excluded_manga is not None:

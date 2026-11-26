@@ -15,7 +15,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 
 from src.config import load_config, normalize_path
-from src.scanner import scan_manga_directory, scan_doujinshi_directory
 from src.detector import (
     detect_manga_duplicates,
     detect_manga_partials,
@@ -23,8 +22,12 @@ from src.detector import (
     detect_visual_duplicates,
     detect_exact_hash_duplicates,
     detect_reference_duplicates,
+    detect_video_duplicates,
     retain_visual_matches,
 )
+from src.scanner import scan_manga_directory, scan_doujinshi_directory
+from src.video_scanner import scan_video_tree
+from src.cache_store import cache_summary, clear_cache
 from src.parser import parse_tree_dump_lines
 from src.actions import ActionExecutor
 from src.reporter import export_json, export_csv, export_html
@@ -41,6 +44,7 @@ STATE = {
     "manga_duplicates": [],  # List[DuplicateGroup]
     "manga_partials": [],    # List[PartialIssue]
     "doujinshi_duplicates": [], # List[DuplicateGroup]
+    "video_duplicates": [],     # List[DuplicateGroup]
     "status_message": "Ready. No active scan running.",
     "scan_progress": "",
     "logs": [],              # List[Dict[str, Any]]
@@ -172,8 +176,8 @@ class ParseTreePayload(BaseModel):
 
 
 class ScanPayload(BaseModel):
-    target: str = "manga"  # 'manga', 'doujinshi', 'all'
-    mode: str = "name"     # 'name', 'image', 'visual', 'exact', 'reference'
+    target: str = "manga"  # 'manga', 'doujinshi', 'video', 'all'
+    mode: str = "name"     # 'name', 'image', 'visual', 'exact', 'reference', 'similar'
     paths: Optional[List[str]] = None
     manga_paths: Optional[List[str]] = None
     doujinshi_paths: Optional[List[str]] = None
@@ -195,6 +199,7 @@ def get_state():
         "manga_duplicates_count": len(STATE["manga_duplicates"]),
         "manga_partials_count": len(STATE["manga_partials"]),
         "doujinshi_duplicates_count": len(STATE["doujinshi_duplicates"]),
+        "video_duplicates_count": len(STATE.get("video_duplicates", [])),
         "active_scan_info": STATE.get("active_scan_info"),
         "loaded_report_name": STATE.get("loaded_report_name", "latest_report.json"),
         "run_history_count": len(STATE.get("run_history", [])),
@@ -414,6 +419,7 @@ def _execute_report_deletion(filename: str):
         STATE["loaded_report_name"] = None
         STATE["manga_duplicates"] = []
         STATE["doujinshi_duplicates"] = []
+        STATE["video_duplicates"] = []
         STATE["manga_partials"] = []
         STATE["total_scanned"] = 0
         STATE["status_message"] = f"Report '{filename}' removed. Resolution window cleared."
@@ -468,6 +474,7 @@ def discard_report(payload: Optional[DiscardReportPayload] = None):
 
     STATE["manga_duplicates"] = []
     STATE["doujinshi_duplicates"] = []
+    STATE["video_duplicates"] = []
     STATE["manga_partials"] = []
     STATE["total_scanned"] = 0
     STATE["loaded_report_name"] = None
@@ -602,6 +609,7 @@ def load_report(payload: LoadReportPayload):
     dupes_raw = data.get("duplicates", [])
     manga_dupes = []
     doujin_dupes = []
+    video_dupes = []
 
     for d in dupes_raw:
         grp = DuplicateGroup(
@@ -617,6 +625,8 @@ def load_report(payload: LoadReportPayload):
         )
         if grp.target_type == "manga":
             manga_dupes.append(grp)
+        elif grp.target_type == "video":
+            video_dupes.append(grp)
         else:
             doujin_dupes.append(grp)
 
@@ -635,29 +645,33 @@ def load_report(payload: LoadReportPayload):
 
     STATE["manga_duplicates"] = manga_dupes
     STATE["doujinshi_duplicates"] = doujin_dupes
+    STATE["video_duplicates"] = video_dupes
     STATE["manga_partials"] = partials
     STATE["total_scanned"] = data.get("summary", {}).get("total_scanned", len(manga_dupes) + len(doujin_dupes))
     STATE["loaded_report_name"] = payload.filename
     STATE["status_message"] = f"Report '{payload.filename}' loaded into Resolution Window. Ready for review."
-    add_scan_log(f"Report '{payload.filename}' loaded into Resolution Window ({len(manga_dupes) + len(doujin_dupes)} duplicate groups).", "SUCCESS")
+    add_scan_log(f"Report '{payload.filename}' loaded into Resolution Window ({len(manga_dupes) + len(doujin_dupes) + len(video_dupes)} duplicate groups).", "SUCCESS")
 
     return {
         "status": "loaded",
         "filename": payload.filename,
         "manga_duplicates_count": len(manga_dupes),
         "doujinshi_duplicates_count": len(doujin_dupes),
+        "video_duplicates_count": len(video_dupes),
         "partials_count": len(partials)
     }
 
 
 @app.get("/api/duplicates")
 def get_duplicates(target: str = Query("all")):
-    """Returns duplicate groups filtered by target ('manga', 'doujinshi', or 'all')."""
+    """Returns duplicate groups filtered by target ('manga', 'doujinshi', 'video', or 'all')."""
     res = []
     if target in ("all", "manga"):
         res.extend([d.to_dict() for d in STATE["manga_duplicates"]])
     if target in ("all", "doujinshi"):
         res.extend([d.to_dict() for d in STATE["doujinshi_duplicates"]])
+    if target in ("all", "video"):
+        res.extend([d.to_dict() for d in STATE.get("video_duplicates", [])])
     return res
 
 
@@ -778,6 +792,14 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             if STATE.get("active_scan_info"):
                 STATE["active_scan_info"]["target"] = target
             add_scan_log("Reference job scans Doujinshi compare directories against reference directories.", "INFO")
+        if target == "video":
+            mode = "similar"
+            if STATE.get("active_scan_info"):
+                STATE["active_scan_info"]["target"] = target
+                STATE["active_scan_info"]["mode"] = mode
+            add_scan_log("Video job walks the whole tree and groups near-duplicate files by sampled frames.", "INFO")
+        elif mode == "similar":
+            raise ValueError("Similar video mode is only available for the Videos library.")
 
         # Parse manga paths
         m_targets: List[Path] = []
@@ -839,6 +861,36 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             add_scan_log(f"Target Doujinshi compare paths ({len(d_targets)}): {[str(p) for p in d_targets]}", "INFO")
         if ref_targets:
             add_scan_log(f"Reference directories ({len(ref_targets)}): {[str(p) for p in ref_targets]}", "INFO")
+
+        v_targets: List[Path] = []
+        if target == "video":
+            STATE["manga_duplicates"] = []
+            STATE["doujinshi_duplicates"] = []
+            STATE["manga_partials"] = []
+            v_targets = [normalize_path(p) for p in (paths or []) if p and str(p).strip()]
+            if not v_targets:
+                raise ValueError("At least one video directory is required.")
+            add_scan_log(f"Target video paths ({len(v_targets)}): {[str(p) for p in v_targets]}", "INFO")
+            videos = []
+            for vp in v_targets:
+                if vp.exists():
+                    found = scan_video_tree(vp, progress_callback=lambda msg, lvl="SCAN": add_scan_log(msg, lvl))
+                    videos.extend(found)
+                else:
+                    add_scan_log(f"Video directory not found or unmounted: {vp}", "WARN")
+            add_scan_log(f"Running near-duplicate scan on {len(videos)} videos...", "INFO")
+            dupes = detect_video_duplicates(
+                videos,
+                progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+            )
+            STATE["video_duplicates"] = dupes
+            STATE["total_scanned"] = len(videos)
+            add_scan_log(
+                f"Detected {len(dupes)} video duplicate groups.",
+                "SUCCESS" if dupes else "INFO",
+            )
+        else:
+            STATE["video_duplicates"] = []
 
         # 1. Scan Manga
         if target in ("manga", "all"):
@@ -961,17 +1013,18 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
         # Auto-export updated reports
         reports_dir = Path(cfg.get("output", {}).get("report_directory", "./reports")).resolve()
         reports_dir.mkdir(parents=True, exist_ok=True)
-        all_dupes = STATE["manga_duplicates"] + STATE["doujinshi_duplicates"]
+        all_dupes = STATE["manga_duplicates"] + STATE["doujinshi_duplicates"] + STATE.get("video_duplicates", [])
         all_parts = STATE["manga_partials"]
 
         effective_job_name = job_name or f"Manual {target.capitalize()} Scan"
+        scanned_roots = v_targets if target == "video" else (m_targets + d_targets)
         report_meta = {
             "job_id": job_id or "manual",
             "job_name": effective_job_name,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "target": target,
             "mode": mode,
-            "paths": [str(p) for p in (m_targets + d_targets)],
+            "paths": [str(p) for p in scanned_roots],
             "reference_paths": [str(p) for p in ref_targets],
         }
 
@@ -1020,8 +1073,9 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             job_id=job_id
         )
         STATE["status_message"] = (
-            f"Scan finished in {elapsed}s: {len(STATE['manga_duplicates'])} manga and "
-            f"{len(STATE['doujinshi_duplicates'])} doujinshi duplicate groups detected."
+            f"Scan finished in {elapsed}s: {len(STATE['manga_duplicates'])} manga, "
+            f"{len(STATE['doujinshi_duplicates'])} doujinshi, and "
+            f"{len(STATE.get('video_duplicates', []))} video duplicate groups detected."
         )
         STATE["scan_progress"] = "Scan finished successfully."
         if STATE.get("active_scan_info"):
@@ -1074,6 +1128,25 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
         "status": "started",
         "message": f"Scan triggered for target '{payload.target}' using {payload.mode}-based modality."
     }
+
+
+@app.get("/api/settings/cache")
+def get_cache_settings():
+    """Cache location, file count, and size. Used by the Settings page."""
+    return cache_summary()
+
+
+@app.post("/api/settings/cache/clear")
+def clear_cache_settings():
+    """Delete fingerprint cache files. Reports and scan jobs are not touched."""
+    if STATE["is_scanning"]:
+        return JSONResponse(status_code=400, content={"error": "A scan is running. Clear the cache after it finishes."})
+    result = clear_cache()
+    add_scan_log(
+        f"Cleared cache at {result['path']} ({result['deleted_files']} files, {result['freed_bytes']} bytes).",
+        "SUCCESS",
+    )
+    return {"status": "cleared", **result}
 
 
 @app.get("/", response_class=HTMLResponse)
