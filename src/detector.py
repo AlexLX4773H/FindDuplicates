@@ -8,6 +8,7 @@ Applies tailored duplicate detection algorithms:
 import os
 import uuid
 from collections import defaultdict
+from pathlib import Path
 from typing import List, Dict, Tuple, Any, Optional
 from src.models import ChapterItem, DoujinshiWork, DuplicateGroup, DuplicateCategory, PartialIssue
 
@@ -472,6 +473,166 @@ def detect_exact_hash_duplicates(
 
     log(
         f"Exact hash report: {len(groups)} groups. {unreadable} items had no readable images.",
+        "SUCCESS" if groups else "WARN",
+    )
+    return groups
+
+
+def _relative_position(file_path: str, roots: Optional[List[Any]]) -> Optional[str]:
+    """Work path relative to the longest configured root that contains it."""
+    if not file_path:
+        return None
+    raw = Path(file_path)
+    try:
+        resolved = raw.resolve()
+    except OSError:
+        resolved = raw
+
+    best_rel = None
+    best_root_len = -1
+    for root in roots or []:
+        root_path = root if isinstance(root, Path) else Path(str(root))
+        try:
+            root_res = root_path.resolve()
+        except OSError:
+            root_res = root_path
+        try:
+            rel = resolved.relative_to(root_res)
+        except ValueError:
+            continue
+        root_len = len(str(root_res))
+        if root_len > best_root_len:
+            best_root_len = root_len
+            best_rel = rel
+    if best_rel is None:
+        return None
+    return best_rel.as_posix()
+
+
+def _position_for(data: dict, roots: Optional[List[Any]]) -> str:
+    computed = _relative_position(data.get("file_path") or "", roots)
+    if computed is not None:
+        return computed
+    existing = data.get("relative_path")
+    if existing:
+        return str(existing).replace("\\", "/")
+    file_path = data.get("file_path") or ""
+    return Path(file_path).name if file_path else ""
+
+
+def _path_identity(data: dict) -> str:
+    path = data.get("file_path") or data.get("raw_name") or ""
+    try:
+        return str(Path(path).resolve())
+    except OSError:
+        return path
+
+
+def detect_reference_duplicates(
+    compare_items: List[Any],
+    reference_items: List[Any],
+    compare_roots: Optional[List[Any]] = None,
+    reference_roots: Optional[List[Any]] = None,
+    progress_callback=None,
+) -> List[DuplicateGroup]:
+    """
+    Exact folder hashes in the compare directories.
+    The copy whose relative path matches the reference library is the keeper.
+    Reference folders are never included as archive candidates.
+    """
+    from src.image_hasher import folder_content_fingerprint
+
+    def log(message: str, level: str = "HASH") -> None:
+        if progress_callback:
+            progress_callback(message, level)
+
+    log(
+        f"Reference job: hashing {len(compare_items)} compare works and {len(reference_items)} reference works...",
+        "HASH",
+    )
+
+    reference_positions: Dict[str, set] = defaultdict(set)
+    for item in reference_items:
+        data = _item_dict(item)
+        path = data.get("file_path") or ""
+        fingerprint = folder_content_fingerprint(path) if path else None
+        if not fingerprint:
+            continue
+        reference_positions[fingerprint].add(_position_for(data, reference_roots))
+
+    buckets: Dict[str, List[dict]] = defaultdict(list)
+    unreadable = 0
+    for item in compare_items:
+        data = _item_dict(item)
+        path = data.get("file_path") or ""
+        fingerprint = folder_content_fingerprint(path) if path else None
+        if not fingerprint:
+            unreadable += 1
+            continue
+        tagged = dict(data)
+        tagged["relative_path"] = _position_for(data, compare_roots)
+        tagged["directory_role"] = "compare"
+        buckets[fingerprint].append(tagged)
+
+    groups: List[DuplicateGroup] = []
+    for fingerprint, members in buckets.items():
+        unique: List[dict] = []
+        seen = set()
+        for member in members:
+            identity = _path_identity(member)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            unique.append(member)
+        if len(unique) < 2:
+            continue
+
+        ref_rels = reference_positions.get(fingerprint, set())
+        matches = [member for member in unique if member.get("relative_path") in ref_rels]
+        if len(matches) == 1:
+            keeper = matches[0].get("file_path") or matches[0].get("raw_name") or ""
+            position_matched = True
+            rel = matches[0].get("relative_path")
+            recommendation = (
+                f"Exact folder hash. Keep the copy at reference position '{rel}' and archive the other copies."
+            )
+        elif len(matches) > 1:
+            keeper = _keeper_path(matches)
+            position_matched = True
+            recommendation = (
+                "Exact folder hash. Several copies share a reference relative path. "
+                "Keep the largest and archive the others."
+            )
+        else:
+            keeper = ""
+            position_matched = False
+            if ref_rels:
+                listed = ", ".join(sorted(ref_rels))
+                recommendation = (
+                    f"Exact folder hash, but no compare copy is at the reference position ({listed}). Review manually."
+                )
+            else:
+                recommendation = (
+                    "Exact folder hash, but this hash is not in the reference library. Review manually."
+                )
+
+        title = unique[0].get("work_name") or unique[0].get("series_name") or unique[0].get("raw_name") or "Exact match"
+        groups.append(
+            DuplicateGroup(
+                group_id=f"reference_{uuid.uuid4().hex[:8]}",
+                target_type="doujinshi",
+                title=title,
+                sub_title="Reference position",
+                category=DuplicateCategory.EXACT_DUPLICATE,
+                items=unique,
+                recommendation=recommendation,
+                recommended_keep_path=keeper,
+                position_matched=position_matched,
+            )
+        )
+
+    log(
+        f"Reference report: {len(groups)} exact groups. {unreadable} compare items had no readable images.",
         "SUCCESS" if groups else "WARN",
     )
     return groups

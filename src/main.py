@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 from src.config import load_config, normalize_path
+from src.web.jobs import validate_reference_directories
 from src.scanner import scan_manga_directory, scan_doujinshi_directory
 from src.detector import (
     detect_manga_duplicates,
@@ -21,6 +22,7 @@ from src.detector import (
     detect_doujinshi_duplicates,
     detect_visual_duplicates,
     detect_exact_hash_duplicates,
+    detect_reference_duplicates,
     retain_visual_matches,
 )
 from src.parser import parse_tree_dump_lines
@@ -92,6 +94,21 @@ def run_doujinshi_job(args, cfg):
         print("[!] No scan paths specified. Use --scan <path> or configure config.yaml.")
         sys.exit(1)
 
+    reference_roots = []
+    if args.by == "reference":
+        reference_args = args.reference_paths or []
+        try:
+            validate_reference_directories(
+                "doujinshi",
+                "reference",
+                [str(p) for p in scan_paths],
+                reference_args,
+            )
+        except ValueError as e:
+            print(f"[!] {e}")
+            sys.exit(1)
+        reference_roots = [normalize_path(p) for p in reference_args]
+
     print(f"[*] Starting Doujinshi global cross-directory scan ({args.by}-based)...")
     works = []
     for p in scan_paths:
@@ -114,6 +131,22 @@ def run_doujinshi_job(args, cfg):
         duplicates = detect_exact_hash_duplicates(
             works,
             target_type="doujinshi",
+            progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
+        )
+    elif args.by == "reference":
+        print("[*] Indexing reference directories for relative position...")
+        reference_works = []
+        for p in reference_roots:
+            if p.exists():
+                reference_works.extend(scan_doujinshi_directory(p, progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}")))
+            else:
+                print(f"[!] Reference path not found: {p}")
+        print(f"[*] Indexed {len(reference_works)} reference works.")
+        duplicates = detect_reference_duplicates(
+            works,
+            reference_works,
+            compare_roots=scan_paths,
+            reference_roots=reference_roots,
             progress_callback=lambda msg, lvl="INFO": print(f"[{lvl}] {msg}"),
         )
     else:
@@ -202,8 +235,9 @@ def main():
 
     # 2. Doujinshi subcommand
     p_doujin = subparsers.add_parser("doujinshi", help="Global cross-directory doujinshi duplicate scanner")
-    p_doujin.add_argument("--by", choices=["name", "image", "visual", "exact"], default="name", help="Detection modality: name, image (name and hash), visual, or exact")
-    p_doujin.add_argument("--scan", action="append", dest="scan_paths", help="Scan path (can be repeated)")
+    p_doujin.add_argument("--by", choices=["name", "image", "visual", "exact", "reference"], default="name", help="Detection modality: name, image (name and hash), visual, exact, or reference")
+    p_doujin.add_argument("--scan", action="append", dest="scan_paths", help="Compare directory (can be repeated)")
+    p_doujin.add_argument("--reference", action="append", dest="reference_paths", help="Reference directory used to choose the copy to keep (can be repeated)")
     p_doujin.add_argument("--output", help="Output directory for reports")
 
     # 3. Parse Tree subcommand

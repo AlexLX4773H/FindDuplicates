@@ -127,6 +127,7 @@ class DuplicateGroup:
     recommendation: str
     recommended_keep_path: str
     hamming_distance: Optional[int] = None
+    position_matched: Optional[bool] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -139,6 +140,7 @@ class DuplicateGroup:
             "recommendation": self.recommendation,
             "recommended_keep_path": self.recommended_keep_path,
             "hamming_distance": self.hamming_distance,
+            "position_matched": self.position_matched,
         }
 
 

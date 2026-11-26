@@ -566,16 +566,22 @@
                 </span>
               </div>
               <textarea id="jobPathsInput" class="field" rows="3" placeholder="/sg2b/Share2sgb/Manga&#10;/media/devmon/L500/Vere NewFolder"></textarea>
-              <p class="hint">Multiple paths are scanned sequentially in one job.</p>
+              <p class="hint" id="jobPathsHint">Multiple paths are scanned sequentially in one job.</p>
+            </div>
+            <div id="jobReferencePathsBlock" class="hidden">
+              <label class="field-label" for="jobReferencePathsInput">Reference Directories (one path per line)</label>
+              <textarea id="jobReferencePathsInput" class="field" rows="3" placeholder="/media/devmon/L500/Canonical"></textarea>
+              <p class="hint">Canonical layout. A compare folder is kept when its path relative to its root matches a reference folder with the same exact hash. Reference folders are never archived.</p>
             </div>
             <div class="form-grid">
               <div>
                 <label class="field-label" for="jobModeSelect">Detection Modality</label>
-                <select id="jobModeSelect" class="field">
+                <select id="jobModeSelect" class="field" onchange="syncReferenceJobFields()">
                   <option value="name">Name &amp; Metadata (Fast)</option>
                   <option value="image">Name and Hash</option>
                   <option value="visual">Visual Similarity</option>
                   <option value="exact">Exact Hash Check</option>
+                  <option value="reference">Reference Position</option>
                 </select>
               </div>
               <div>
@@ -682,15 +688,21 @@
             <label class="choice"><input type="radio" name="scanMode" value="image"><div><strong>Name and Hash</strong><span>Same chapter number, then perceptual hash</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="visual"><div><strong>Visual Similarity</strong><span>Image similarity only, names ignored</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="exact"><div><strong>Exact Hash Check</strong><span>Byte-identical folder images</span></div></label>
+            <label class="choice"><input type="radio" name="scanMode" value="reference"><div><strong>Reference Position</strong><span>Exact hash, keep the reference relative path</span></div></label>
           </div>
         </div>
         <div>
-          <label class="field-label" for="scanPathsInput">Target Scan Directories (one path per line)</label>
+          <label class="field-label" for="scanPathsInput" id="scanPathsLabel">Target Scan Directories (one path per line)</label>
           <textarea id="scanPathsInput" class="field" rows="4" placeholder="/sg2b/Share2sgb/Manga"></textarea>
           <div class="inline-actions" style="margin-top:8px">
             <button type="button" class="btn-ghost" onclick="appendScanPath('/sg2b/Share2sgb/Manga')">+ Manga NAS</button>
             <button type="button" class="btn-ghost" onclick="appendScanPath('/media/devmon/L500/Vere NewFolder')">+ Doujinshi Disk</button>
           </div>
+        </div>
+        <div id="scanReferencePathsBlock" class="hidden">
+          <label class="field-label" for="scanReferencePathsInput">Reference Directories (one path per line)</label>
+          <textarea id="scanReferencePathsInput" class="field" rows="3" placeholder="/media/devmon/L500/Canonical"></textarea>
+          <p class="hint">Used only to decide which exact copy to keep. These folders are not marked for archive or delete.</p>
         </div>
         <div id="modalScanLogContainer" class="hidden">
           <div class="inline-actions" style="justify-content:space-between">
@@ -1305,11 +1317,16 @@
             name: 'Metadata (Fast)',
             image: 'Name and Hash',
             visual: 'Visual Similarity',
-            exact: 'Exact Hash Check'
+            exact: 'Exact Hash Check',
+            reference: 'Reference Position'
           };
           const modeTitle = modeTitles[job.mode] || 'Metadata (Fast)';
+          const isReference = job.mode === 'reference';
 
           const pathsListHtml = (job.paths || []).map(p => `
+            <div class="path-line truncate" title="${escapeHtml(p)}">${escapeHtml(p)}</div>
+          `).join('');
+          const referenceListHtml = (job.reference_paths || []).map(p => `
             <div class="path-line truncate" title="${escapeHtml(p)}">${escapeHtml(p)}</div>
           `).join('');
 
@@ -1337,8 +1354,12 @@
               </div>
               <h4>${escapeHtml(job.name)}</h4>
               ${job.description ? `<p class="hint">${escapeHtml(job.description)}</p>` : ''}
-              <div class="hint" style="margin-top:8px">Locations (${job.paths ? job.paths.length : 0})</div>
+              <div class="hint" style="margin-top:8px">${isReference ? 'Compare' : 'Locations'} (${job.paths ? job.paths.length : 0})</div>
               <div class="path-list">${pathsListHtml || '<div class="hint">No paths configured.</div>'}</div>
+              ${isReference ? `
+                <div class="hint" style="margin-top:8px">Reference (${(job.reference_paths || []).length})</div>
+                <div class="path-list">${referenceListHtml || '<div class="hint">No reference directories.</div>'}</div>
+              ` : ''}
               ${(job.excluded_manga && job.excluded_manga.length > 0) ? `
                 <div class="chip-row" style="margin-top:8px">
                   ${job.excluded_manga.map(ex => `<span class="chip">${escapeHtml(ex)}</span>`).join('')}
@@ -1390,14 +1411,40 @@
       }
     }
 
+    function syncReferenceJobFields() {
+      const mode = document.getElementById('jobModeSelect').value;
+      const block = document.getElementById('jobReferencePathsBlock');
+      const target = document.getElementById('jobTargetTypeSelect');
+      const pathsHint = document.getElementById('jobPathsHint');
+      const isReference = mode === 'reference';
+      if (block) block.classList.toggle('hidden', !isReference);
+      if (target) {
+        if (isReference) {
+          target.value = 'doujinshi';
+          target.disabled = true;
+        } else {
+          target.disabled = false;
+        }
+      }
+      if (pathsHint) {
+        pathsHint.textContent = isReference
+          ? 'Compare directories. Exact duplicates are found here. The copy whose relative path matches the reference library is kept.'
+          : 'Multiple paths are scanned sequentially in one job.';
+      }
+    }
+
     function cancelJobEdit() {
       document.getElementById('editJobId').value = '';
       document.getElementById('jobNameInput').value = '';
       document.getElementById('jobPathsInput').value = '';
+      document.getElementById('jobReferencePathsInput').value = '';
+      document.getElementById('jobModeSelect').value = 'name';
+      document.getElementById('jobTargetTypeSelect').value = 'manga';
       document.getElementById('jobDescInput').value = '';
       document.getElementById('jobExclusionsInput').value = '';
       document.getElementById('jobFormTitle').innerHTML = '<span>⚡ Create New Scan Job</span>';
       document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Save Job</span>';
+      syncReferenceJobFields();
       document.getElementById('createJobFormPanel').classList.add('hidden');
     }
 
@@ -1408,9 +1455,11 @@
       document.getElementById('jobNameInput').value = job.name || '';
       document.getElementById('jobTargetTypeSelect').value = job.target_type || 'manga';
       document.getElementById('jobPathsInput').value = (job.paths || []).join('\n');
+      document.getElementById('jobReferencePathsInput').value = (job.reference_paths || []).join('\n');
       document.getElementById('jobModeSelect').value = job.mode || 'name';
       document.getElementById('jobDescInput').value = job.description || '';
       document.getElementById('jobExclusionsInput').value = (job.excluded_manga || []).join('\n');
+      syncReferenceJobFields();
       document.getElementById('jobFormTitle').innerHTML = `<span>✏️ Edit Scan Job: ${escapeHtml(job.name)}</span>`;
       document.getElementById('btnSaveJobOnly').innerHTML = '<span>💾 Update Job</span>';
       toggleCreateJobForm(true);
@@ -1433,16 +1482,30 @@
       }
 
       const paths = rawPaths.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+      const reference_paths = document.getElementById('jobReferencePathsInput').value.split('\n').map(p => p.trim()).filter(p => p.length > 0);
       if (paths.length === 0) {
         alert('Please enter at least one target directory path for this scan job.');
         document.getElementById('jobPathsInput').focus();
+        return;
+      }
+      if (mode === 'reference' && reference_paths.length === 0) {
+        alert('A reference job needs at least one reference directory.');
+        document.getElementById('jobReferencePathsInput').focus();
         return;
       }
 
       try {
         let res;
         let savedJobId = editId;
-        const payloadObj = { name, target_type, paths, mode, description, excluded_manga };
+        const payloadObj = {
+          name,
+          target_type: mode === 'reference' ? 'doujinshi' : target_type,
+          paths,
+          mode,
+          description,
+          excluded_manga,
+          reference_paths
+        };
 
         if (editId) {
           res = await fetch(`/api/jobs/${editId}`, {
@@ -1702,14 +1765,15 @@
         const visual = splitVisualVerification(g.recommendation || '');
         const reasonLabel = humanizeReason(g.category || '');
 
+        const positionUnresolved = g.position_matched === false;
         let itemsHtml = g.items.map(it => {
           const name = it.raw_name || it.work_name || '';
           const path = it.file_path || name;
           const group = it.scanlator_group || it.scanlator || 'Uncredited';
-          const isKeeper = (path === g.recommended_keep_path || name === g.recommended_keep_path);
+          const isKeeper = !positionUnresolved && !!g.recommended_keep_path && (path === g.recommended_keep_path || name === g.recommended_keep_path);
 
           if (!selectedActions[path]) {
-            selectedActions[path] = isKeeper ? 'keep' : 'move_archive';
+            selectedActions[path] = positionUnresolved ? 'keep' : (isKeeper ? 'keep' : 'move_archive');
           }
           const curAction = selectedActions[path];
           const edge = curAction === 'keep' ? 'action-keep' : (curAction === 'delete' ? 'action-delete' : 'action-archive');
@@ -1738,6 +1802,7 @@
                 <div class="meta-line">
                   <span>Group: <strong>${escapeHtml(group)}</strong></span>
                   ${it.page_count ? `<span>Pages: <strong>${it.page_count}</strong></span>` : ''}
+                  ${it.relative_path ? `<span>Position: <strong>${escapeHtml(it.relative_path)}</strong></span>` : ''}
                   ${it.volume_root ? `<span>Vol: <strong>${escapeHtml(it.volume_root)}</strong></span>` : ''}
                 </div>
                 <div class="path-row">
@@ -1789,9 +1854,10 @@
 
     function autoSelectRecommended() {
       duplicatesData.forEach(g => {
+        if (g.position_matched === false) return;
         g.items.forEach(it => {
           const path = it.file_path || it.raw_name || it.work_name;
-          const isKeeper = (path === g.recommended_keep_path || (it.raw_name || '') === g.recommended_keep_path);
+          const isKeeper = !!g.recommended_keep_path && (path === g.recommended_keep_path || (it.raw_name || '') === g.recommended_keep_path);
           selectedActions[path] = isKeeper ? 'keep' : 'move_archive';
         });
       });
@@ -1811,9 +1877,32 @@
     // =========================================================================
     // SCAN MODAL LOGIC (JOB RUNNER - REPORT CREATION ONLY)
     // =========================================================================
+    function syncScanReferenceMode() {
+      const selected = document.querySelector('input[name="scanMode"]:checked');
+      const mode = selected ? selected.value : 'name';
+      const isReference = mode === 'reference';
+      const block = document.getElementById('scanReferencePathsBlock');
+      const label = document.getElementById('scanPathsLabel');
+      if (block) block.classList.toggle('hidden', !isReference);
+      if (label) {
+        label.textContent = isReference
+          ? 'Compare Directories (one path per line)'
+          : 'Target Scan Directories (one path per line)';
+      }
+      document.querySelectorAll('input[name="scanTarget"]').forEach(r => {
+        if (isReference) {
+          r.checked = r.value === 'doujinshi';
+          r.disabled = r.value !== 'doujinshi';
+        } else {
+          r.disabled = false;
+        }
+      });
+    }
+
     function openScanModal() {
       const targetRadio = document.querySelector('input[name="scanTarget"]:checked').value;
       updateDefaultScanPathsForTarget(targetRadio);
+      syncScanReferenceMode();
       document.getElementById('scanStatusBox').classList.add('hidden');
       document.getElementById('scanModal').classList.remove('hidden');
     }
@@ -1841,6 +1930,12 @@
       });
     });
 
+    document.querySelectorAll('input[name="scanMode"]').forEach(r => {
+      r.addEventListener('change', () => {
+        syncScanReferenceMode();
+      });
+    });
+
     function appendScanPath(path) {
       const ta = document.getElementById('scanPathsInput');
       const lines = ta.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -1854,6 +1949,17 @@
       const target = document.querySelector('input[name="scanTarget"]:checked').value;
       const mode = document.querySelector('input[name="scanMode"]:checked').value;
       const rawPaths = document.getElementById('scanPathsInput').value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const referencePaths = document.getElementById('scanReferencePathsInput').value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (mode === 'reference') {
+        if (rawPaths.length === 0) {
+          alert('Enter at least one compare directory.');
+          return;
+        }
+        if (referencePaths.length === 0) {
+          alert('Enter at least one reference directory.');
+          return;
+        }
+      }
 
       const statusBox = document.getElementById('scanStatusBox');
       const modalLogContainer = document.getElementById('modalScanLogContainer');
@@ -1878,9 +1984,10 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            target: target,
+            target: mode === 'reference' ? 'doujinshi' : target,
             mode: mode,
-            paths: rawPaths
+            paths: rawPaths,
+            reference_paths: mode === 'reference' ? referencePaths : []
           })
         });
         const data = await res.json();

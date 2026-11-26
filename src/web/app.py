@@ -22,13 +22,14 @@ from src.detector import (
     detect_doujinshi_duplicates,
     detect_visual_duplicates,
     detect_exact_hash_duplicates,
+    detect_reference_duplicates,
     retain_visual_matches,
 )
 from src.parser import parse_tree_dump_lines
 from src.actions import ActionExecutor
 from src.reporter import export_json, export_csv, export_html
 from src.models import DuplicateGroup, PartialIssue
-from src.web.jobs import job_manager, ScanJobCreatePayload, ScanJobUpdatePayload
+from src.web.jobs import job_manager, ScanJobCreatePayload, ScanJobUpdatePayload, validate_reference_directories
 
 app = FastAPI(title="FindDuplicates Dashboard", version="2.1.0")
 
@@ -172,10 +173,11 @@ class ParseTreePayload(BaseModel):
 
 class ScanPayload(BaseModel):
     target: str = "manga"  # 'manga', 'doujinshi', 'all'
-    mode: str = "name"     # 'name', 'image', 'visual', 'exact'
+    mode: str = "name"     # 'name', 'image', 'visual', 'exact', 'reference'
     paths: Optional[List[str]] = None
     manga_paths: Optional[List[str]] = None
     doujinshi_paths: Optional[List[str]] = None
+    reference_paths: Optional[List[str]] = None
     job_id: Optional[str] = None
     job_name: Optional[str] = None
     excluded_manga: Optional[List[str]] = None
@@ -515,7 +517,10 @@ def get_scan_job(job_id: str):
 @app.put("/api/jobs/{job_id}")
 def update_scan_job(job_id: str, payload: ScanJobUpdatePayload):
     """Updates an existing scan job."""
-    updated = job_manager.update_job(job_id, payload)
+    try:
+        updated = job_manager.update_job(job_id, payload)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
     if not updated:
         return JSONResponse(status_code=404, content={"error": f"Job not found: {job_id}"})
     add_scan_log(f"Updated Scan Job: '{updated['name']}'", "INFO")
@@ -542,10 +547,16 @@ def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
     if not job:
         return JSONResponse(status_code=404, content={"error": f"Job not found: {job_id}"})
 
-    job_manager.update_job_run_status(job_id, status="running")
     target = job.get("target_type", "manga")
     mode = job.get("mode", "name")
     paths = job.get("paths", [])
+    reference_paths = job.get("reference_paths") or []
+    try:
+        validate_reference_directories(target, mode, paths, reference_paths)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    job_manager.update_job_run_status(job_id, status="running")
     excluded_manga = job.get("excluded_manga", [])
 
     background_tasks.add_task(
@@ -557,7 +568,8 @@ def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
         doujinshi_paths=paths if target in ("doujinshi", "all") else None,
         job_id=job["id"],
         job_name=job["name"],
-        excluded_manga=excluded_manga
+        excluded_manga=excluded_manga,
+        reference_paths=reference_paths,
     )
 
     add_scan_log(f"Executing Scan Job '{job['name']}' across {len(paths)} locations...", "INFO")
@@ -739,7 +751,7 @@ def run_parse_tree(payload: ParseTreePayload):
         }
 
 
-def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None, excluded_manga: Optional[List[str]] = None):
+def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None, excluded_manga: Optional[List[str]] = None, reference_paths: Optional[List[str]] = None):
     start_time = datetime.now()
     STATE["is_scanning"] = True
     display_title = job_name or f"{target} ({mode}-based)"
@@ -761,6 +773,11 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
 
     try:
         cfg = load_config()
+        if mode == "reference":
+            target = "doujinshi"
+            if STATE.get("active_scan_info"):
+                STATE["active_scan_info"]["target"] = target
+            add_scan_log("Reference job scans Doujinshi compare directories against reference directories.", "INFO")
 
         # Parse manga paths
         m_targets: List[Path] = []
@@ -806,10 +823,22 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
                         if np not in d_targets:
                             d_targets.append(np)
 
+        ref_targets: List[Path] = []
+        if mode == "reference":
+            m_targets = []
+            d_targets = [normalize_path(p) for p in (paths or []) if p and str(p).strip()]
+            ref_targets = [normalize_path(p) for p in (reference_paths or []) if p and str(p).strip()]
+            if not d_targets:
+                raise ValueError("At least one compare directory is required.")
+            if not ref_targets:
+                raise ValueError("At least one reference directory is required.")
+
         if target in ("manga", "all"):
             add_scan_log(f"Target Manga scan paths ({len(m_targets)}): {[str(p) for p in m_targets]}", "INFO")
         if target in ("doujinshi", "all"):
-            add_scan_log(f"Target Doujinshi scan paths ({len(d_targets)}): {[str(p) for p in d_targets]}", "INFO")
+            add_scan_log(f"Target Doujinshi compare paths ({len(d_targets)}): {[str(p) for p in d_targets]}", "INFO")
+        if ref_targets:
+            add_scan_log(f"Reference directories ({len(ref_targets)}): {[str(p) for p in ref_targets]}", "INFO")
 
         # 1. Scan Manga
         if target in ("manga", "all"):
@@ -888,6 +917,30 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
                     target_type="doujinshi",
                     progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
                 )
+            elif mode == "reference":
+                reference_works = []
+                for rp in ref_targets:
+                    if rp.exists():
+                        add_scan_log(f"Walking reference directory: '{rp.name}'...", "SCAN")
+                        found_ref = scan_doujinshi_directory(
+                            rp,
+                            progress_callback=lambda msg, lvl="SCAN": add_scan_log(msg, lvl),
+                        )
+                        reference_works.extend(found_ref)
+                        add_scan_log(f"Indexed {len(found_ref)} reference works from '{rp.name}'.", "INFO")
+                    else:
+                        add_scan_log(f"Reference directory not found or unmounted: {rp}", "WARN")
+                add_scan_log(
+                    f"Comparing {len(works)} compare works with {len(reference_works)} reference works by exact hash and relative path...",
+                    "INFO",
+                )
+                dupes = detect_reference_duplicates(
+                    works,
+                    reference_works,
+                    compare_roots=d_targets,
+                    reference_roots=ref_targets,
+                    progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
+                )
             else:
                 add_scan_log(f"Running global cross-directory duplicate detector on {len(works)} doujinshi works...", "INFO")
                 dupes = detect_doujinshi_duplicates(works)
@@ -918,7 +971,8 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "target": target,
             "mode": mode,
-            "paths": [str(p) for p in (m_targets + d_targets)]
+            "paths": [str(p) for p in (m_targets + d_targets)],
+            "reference_paths": [str(p) for p in ref_targets],
         }
 
         # Determine primary report file name
@@ -999,6 +1053,11 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
     if STATE["is_scanning"]:
         return JSONResponse(status_code=400, content={"error": "A scan is already in progress. Please wait."})
 
+    try:
+        validate_reference_directories(payload.target, payload.mode, payload.paths, payload.reference_paths)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
     background_tasks.add_task(
         _run_background_scan,
         target=payload.target,
@@ -1008,7 +1067,8 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
         doujinshi_paths=payload.doujinshi_paths,
         job_id=payload.job_id,
         job_name=payload.job_name,
-        excluded_manga=payload.excluded_manga
+        excluded_manga=payload.excluded_manga,
+        reference_paths=payload.reference_paths,
     )
     return {
         "status": "started",

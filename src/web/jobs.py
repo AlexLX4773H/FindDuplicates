@@ -14,16 +14,17 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-from src.config import load_config
+from src.config import load_config, normalize_path
 
 
 class ScanJobCreatePayload(BaseModel):
     name: str = Field(..., min_length=1, description="User-defined friendly name for the scan job")
     target_type: str = Field("manga", description="'manga', 'doujinshi', or 'all'")
-    paths: List[str] = Field(..., min_items=1, description="One or more target directory paths to scan")
-    mode: str = Field("name", description="'name', 'image', 'visual', or 'exact'")
+    paths: List[str] = Field(..., min_items=1, description="Compare directories. For a reference job these are the folders to clean.")
+    mode: str = Field("name", description="'name', 'image', 'visual', 'exact', or 'reference'")
     description: Optional[str] = ""
     excluded_manga: Optional[List[str]] = Field(default_factory=list, description="Manga series names/titles to exclude from scan")
+    reference_paths: Optional[List[str]] = Field(default_factory=list, description="Canonical directories used to decide which exact copy to keep")
 
 
 class ScanJobUpdatePayload(BaseModel):
@@ -33,6 +34,57 @@ class ScanJobUpdatePayload(BaseModel):
     mode: Optional[str] = None
     description: Optional[str] = None
     excluded_manga: Optional[List[str]] = None
+    reference_paths: Optional[List[str]] = None
+
+
+def _clean_path_list(paths: Optional[List[str]]) -> List[str]:
+    return [p.strip() for p in (paths or []) if p and str(p).strip()]
+
+
+def _path_key(raw: str) -> str:
+    try:
+        resolved = str(normalize_path(raw))
+    except Exception:
+        resolved = raw.strip()
+    return os.path.normcase(os.path.normpath(resolved))
+
+
+def _path_contains(parent_key: str, child_key: str) -> bool:
+    if parent_key == child_key:
+        return True
+    prefix = parent_key.rstrip("\\/") + os.sep
+    return child_key.startswith(prefix)
+
+
+def validate_reference_directories(
+    target_type: str,
+    mode: str,
+    paths: Optional[List[str]],
+    reference_paths: Optional[List[str]],
+) -> List[str]:
+    """
+    Reference jobs are doujinshi-only and need two disjoint directory lists.
+    Other modes keep any stored reference paths without extra requirements.
+    """
+    cleaned_refs = _clean_path_list(reference_paths)
+    if (mode or "").strip().lower() != "reference":
+        return cleaned_refs
+
+    cleaned_paths = _clean_path_list(paths)
+    if (target_type or "").strip().lower() != "doujinshi":
+        raise ValueError("Reference jobs are only available for Doujinshi libraries.")
+    if not cleaned_paths:
+        raise ValueError("At least one compare directory is required.")
+    if not cleaned_refs:
+        raise ValueError("At least one reference directory is required.")
+
+    compare_keys = [_path_key(p) for p in cleaned_paths]
+    ref_keys = [_path_key(p) for p in cleaned_refs]
+    for left in compare_keys:
+        for right in ref_keys:
+            if _path_contains(left, right) or _path_contains(right, left):
+                raise ValueError("Compare directories and reference directories must not overlap.")
+    return cleaned_refs
 
 
 class ScanJobManager:
@@ -129,6 +181,10 @@ class ScanJobManager:
         if not clean_paths:
             raise ValueError("At least one valid scan directory path is required.")
 
+        mode = payload.mode.strip().lower()
+        target_type = payload.target_type.strip().lower()
+        clean_refs = validate_reference_directories(target_type, mode, clean_paths, payload.reference_paths)
+
         job_slug = re.sub(r"[^a-zA-Z0-9]+", "_", payload.name.strip().lower()).strip("_")
         unique_id = f"job_{job_slug}_{uuid.uuid4().hex[:6]}"
 
@@ -137,11 +193,12 @@ class ScanJobManager:
         new_job = {
             "id": unique_id,
             "name": payload.name.strip(),
-            "target_type": payload.target_type.strip().lower(),
+            "target_type": target_type,
             "paths": clean_paths,
-            "mode": payload.mode.strip().lower(),
+            "mode": mode,
             "description": payload.description.strip() if payload.description else "",
             "excluded_manga": clean_exclusions,
+            "reference_paths": clean_refs,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "last_run": None,
             "last_status": "never_run",
@@ -179,6 +236,15 @@ class ScanJobManager:
             target_job["description"] = payload.description.strip()
         if payload.excluded_manga is not None:
             target_job["excluded_manga"] = [ex.strip() for ex in payload.excluded_manga if ex.strip()]
+        if payload.reference_paths is not None:
+            target_job["reference_paths"] = _clean_path_list(payload.reference_paths)
+
+        target_job["reference_paths"] = validate_reference_directories(
+            target_job.get("target_type", ""),
+            target_job.get("mode", ""),
+            target_job.get("paths"),
+            target_job.get("reference_paths"),
+        )
 
         self._save_all(jobs)
         return target_job
