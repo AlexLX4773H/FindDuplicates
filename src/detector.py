@@ -236,6 +236,69 @@ def detect_manga_partials(
     return issues
 
 
+def _compact_chapter_numbers(numbers: List[int]) -> str:
+    """Turn sorted chapter numbers into ranges such as '3, 7–9, 15'."""
+    if not numbers:
+        return ""
+    ranges: List[str] = []
+    start = prev = numbers[0]
+    for number in numbers[1:]:
+        if number == prev + 1:
+            prev = number
+            continue
+        ranges.append(str(start) if start == prev else f"{start}–{prev}")
+        start = prev = number
+    ranges.append(str(start) if start == prev else f"{start}–{prev}")
+    return ", ".join(ranges)
+
+
+def detect_missing_chapters(
+    chapters: List[ChapterItem],
+    progress_callback=None,
+) -> List[PartialIssue]:
+    """
+    List whole chapter numbers missing between the first and last chapter of each series.
+    Fractional chapters do not fill a gap. Nothing is selected for archive or deletion.
+    """
+    series_map: Dict[str, List[ChapterItem]] = defaultdict(list)
+    for chapter in chapters:
+        series_map[(chapter.series_name or "").lower()].append(chapter)
+
+    issues: List[PartialIssue] = []
+    for series_key, items in series_map.items():
+        series_display = items[0].series_name or series_key
+        whole = set()
+        for chapter in items:
+            number = chapter.chapter_num
+            if number is None:
+                continue
+            if float(number).is_integer():
+                whole.add(int(number))
+        if len(whole) < 2:
+            continue
+        low, high = min(whole), max(whole)
+        missing = [number for number in range(low + 1, high) if number not in whole]
+        if not missing:
+            continue
+        listed = _compact_chapter_numbers(missing)
+        issues.append(
+            PartialIssue(
+                issue_id=f"miss_{uuid.uuid4().hex[:8]}",
+                series_name=series_display,
+                issue_type="missing_chapters",
+                description=f"Missing chapters: {listed}",
+                affected_items=[],
+            )
+        )
+
+    if progress_callback:
+        progress_callback(
+            f"Missing chapter check: {len(issues)} series with gaps.",
+            "SUCCESS" if issues else "INFO",
+        )
+    return issues
+
+
 # ==============================================================================
 # Doujinshi Detection Engine (Global Cross-Directory Scope)
 # ==============================================================================
@@ -528,6 +591,25 @@ def _path_identity(data: dict) -> str:
         return path
 
 
+def _hash_library(items: List[Any], label: str, progress_callback=None):
+    """Hash each folder, reporting the current name before the read starts."""
+    from src.image_hasher import folder_content_fingerprint
+
+    total = len(items)
+    hashed = []
+    for index, item in enumerate(items, start=1):
+        data = _item_dict(item)
+        path = data.get("file_path") or ""
+        name = Path(path).name if path else (data.get("raw_name") or data.get("work_name") or "item")
+        message = f"Hashing {label} {index}/{total}: {name}"
+        if progress_callback:
+            level = "HASH" if index == 1 or index == total or index % 25 == 0 else "PROGRESS"
+            progress_callback(message, level)
+        fingerprint = folder_content_fingerprint(path) if path else None
+        hashed.append((data, fingerprint))
+    return hashed
+
+
 def detect_reference_duplicates(
     compare_items: List[Any],
     reference_items: List[Any],
@@ -540,8 +622,6 @@ def detect_reference_duplicates(
     The copy whose relative path matches the reference library is the keeper.
     Reference folders are never included as archive candidates.
     """
-    from src.image_hasher import folder_content_fingerprint
-
     def log(message: str, level: str = "HASH") -> None:
         if progress_callback:
             progress_callback(message, level)
@@ -552,20 +632,14 @@ def detect_reference_duplicates(
     )
 
     reference_positions: Dict[str, set] = defaultdict(set)
-    for item in reference_items:
-        data = _item_dict(item)
-        path = data.get("file_path") or ""
-        fingerprint = folder_content_fingerprint(path) if path else None
+    for data, fingerprint in _hash_library(reference_items, "reference", progress_callback):
         if not fingerprint:
             continue
         reference_positions[fingerprint].add(_position_for(data, reference_roots))
 
     buckets: Dict[str, List[dict]] = defaultdict(list)
     unreadable = 0
-    for item in compare_items:
-        data = _item_dict(item)
-        path = data.get("file_path") or ""
-        fingerprint = folder_content_fingerprint(path) if path else None
+    for data, fingerprint in _hash_library(compare_items, "compare", progress_callback):
         if not fingerprint:
             unreadable += 1
             continue

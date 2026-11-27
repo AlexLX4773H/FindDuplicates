@@ -148,7 +148,7 @@ class DuplicateGroup:
 class PartialIssue:
     issue_id: str
     series_name: str
-    issue_type: str  # 'fractional_overlap', 'low_page_count', 'keyword_flagged'
+    issue_type: str  # 'fractional_overlap', 'low_page_count', 'keyword_flagged', 'missing_chapters'
     description: str
     affected_items: List[Dict[str, Any]]
 

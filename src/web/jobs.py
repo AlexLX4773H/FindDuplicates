@@ -21,7 +21,7 @@ class ScanJobCreatePayload(BaseModel):
     name: str = Field(..., min_length=1, description="User-defined friendly name for the scan job")
     target_type: str = Field("manga", description="'manga', 'doujinshi', 'video', or 'all'")
     paths: List[str] = Field(..., min_items=1, description="Compare directories. For a reference job these are the folders to clean.")
-    mode: str = Field("name", description="'name', 'image', 'visual', 'exact', 'reference', or 'similar'")
+    mode: str = Field("name", description="'name', 'image', 'visual', 'exact', 'reference', 'missing', or 'similar'")
     description: Optional[str] = ""
     excluded_manga: Optional[List[str]] = Field(default_factory=list, description="Manga series names/titles to exclude from scan")
     reference_paths: Optional[List[str]] = Field(default_factory=list, description="Canonical directories used to decide which exact copy to keep")
@@ -60,9 +60,12 @@ def normalize_job_mode(target_type: str, mode: str) -> tuple:
     """
     Video jobs always use similar-frame matching.
     Similar mode is not valid for manga or doujinshi.
+    Missing-chapter checks are manga and manhwa only.
     """
     target = (target_type or "").strip().lower()
     selected = (mode or "").strip().lower()
+    if selected == "missing" and target != "manga":
+        raise ValueError("Missing chapters mode is only available for Manga / Manhwa libraries.")
     if target == "video":
         return target, "similar"
     if selected == "similar":

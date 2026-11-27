@@ -234,6 +234,7 @@
     .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--gold-bright); flex-shrink: 0; }
     .dot.is-done { background: var(--status-keep); }
     .console-panel { border-color: var(--border-gold-subtle); }
+    #logsView #consoleLogOutput { max-height: none; height: calc(100vh - 220px); }
     .console-head { justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; }
     .console-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; border: 1px solid var(--border-subtle); }
     .console-badge.badge-live { color: var(--gold-bright); border-color: var(--border-gold-subtle); background: var(--gold-tint); }
@@ -393,6 +394,13 @@
           </span>
           <span id="tabJobsCountBadge" class="nav-count">0</span>
         </button>
+        <button type="button" onclick="switchTab('logs')" id="tab-logs" class="nav-item tab-btn">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h12M8 12h12M8 18h8"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>
+            Logs
+          </span>
+          <span id="navLogCount" class="nav-count">0</span>
+        </button>
         <button type="button" onclick="switchTab('reports')" id="tab-reports" class="nav-item tab-btn">
           <span class="nav-item-left">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
@@ -427,9 +435,8 @@
 
       <div class="sidebar-footer">
         <div class="nav-section-label">Utilities</div>
-        <button type="button" onclick="toggleLogConsole()" id="btnToggleLogs" class="util-btn">
+        <button type="button" onclick="switchTab('logs')" id="btnToggleLogs" class="util-btn">
           <span class="util-left"><span id="navLogDot" class="nav-log-dot dot-idle"></span> Scan Logs</span>
-          <span id="navLogCount" class="nav-count">0</span>
         </button>
         <button type="button" onclick="openCasaOSModal()" class="util-btn">
           <span class="util-left">
@@ -479,20 +486,19 @@
       </header>
 
       <main class="workspace">
-        <div id="liveScanConsolePanel" class="panel console-panel hidden">
+        <div id="logsView" class="hidden">
+        <div id="liveScanConsolePanel" class="panel console-panel">
           <div class="console-head">
             <div>
               <div class="inline-actions">
                 <h2>Live Scan Activity</h2>
                 <span id="consoleStatusBadge" class="console-badge badge-idle"><span id="consoleStatusText">Idle</span></span>
               </div>
-              <p id="consoleSubProgress">Initializing scan job...</p>
+              <p id="consoleSubProgress">No scan running.</p>
             </div>
             <div class="inline-actions">
               <button onclick="toggleAutoScroll()" id="btnAutoScroll" class="btn-ghost is-on">Auto-Scroll: ON</button>
               <button onclick="clearScanLogs()" class="btn-ghost">Clear Logs</button>
-              <button onclick="toggleConsoleMinimize()" id="btnMinimizeConsole" class="btn-ghost">Minimize</button>
-              <button onclick="closeLogConsole()" class="btn-ghost" title="Close Log Console" aria-label="Close Log Console">&times;</button>
             </div>
           </div>
           <div id="consoleBodyContainer">
@@ -501,6 +507,7 @@
             </div>
             <div id="consoleProgressBar" class="hidden"><div class="bar"></div></div>
           </div>
+        </div>
         </div>
 
         <div id="samplesView" class="panel hidden">
@@ -595,6 +602,7 @@
                   <option value="image">Name and Hash</option>
                   <option value="visual">Visual Similarity</option>
                   <option value="exact">Exact Hash Check</option>
+                  <option value="missing">Missing Chapters</option>
                   <option value="reference">Reference Position</option>
                   <option value="similar">Similar Video</option>
                 </select>
@@ -685,6 +693,7 @@
               <button onclick="setReportFilter('doujinshi')" id="subfilter-doujinshi" class="filter-tab subfilter-btn">Doujinshi <span id="subfilterCountDoujinshi" class="nav-count">0</span></button>
               <button onclick="setReportFilter('video')" id="subfilter-video" class="filter-tab subfilter-btn">Videos <span id="subfilterCountVideo" class="nav-count">0</span></button>
               <button onclick="setReportFilter('partials')" id="subfilter-partials" class="filter-tab subfilter-btn">Partials / Splits <span id="subfilterCountPartials" class="nav-count">0</span></button>
+              <button onclick="setReportFilter('missing')" id="subfilter-missing" class="filter-tab subfilter-btn">Missing Chapters <span id="subfilterCountMissing" class="nav-count">0</span></button>
             </div>
             <div class="filter-actions">
               <div class="search-wrap">
@@ -735,6 +744,7 @@
             <label class="choice"><input type="radio" name="scanMode" value="image"><div><strong>Name and Hash</strong><span>Same chapter number, then perceptual hash</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="visual"><div><strong>Visual Similarity</strong><span>Image similarity only, names ignored</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="exact"><div><strong>Exact Hash Check</strong><span>Byte-identical folder images</span></div></label>
+            <label class="choice"><input type="radio" name="scanMode" value="missing"><div><strong>Missing Chapters</strong><span>List manga and manhwa numbers that are not on disk</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="reference"><div><strong>Reference Position</strong><span>Exact hash, keep the reference relative path</span></div></label>
             <label class="choice"><input type="radio" name="scanMode" value="similar"><div><strong>Similar Video</strong><span>Sampled frames, names ignored</span></div></label>
           </div>
@@ -866,7 +876,6 @@
     let lastLogId = 0;
     let isLogConsoleOpen = false;
     let autoScrollEnabled = true;
-    let isConsoleMinimized = false;
     let pollInterval = 3500;
     let pollTimer = null;
 
@@ -962,28 +971,15 @@
     }
 
     function openLogConsole() {
-      const panel = document.getElementById('liveScanConsolePanel');
-      if (panel) {
-        panel.classList.remove('hidden');
-        isLogConsoleOpen = true;
-      }
+      switchTab('logs');
     }
 
     function closeLogConsole() {
-      const panel = document.getElementById('liveScanConsolePanel');
-      if (panel) {
-        panel.classList.add('hidden');
-        isLogConsoleOpen = false;
-      }
+      if (activeTab === 'logs') switchTab('report');
     }
 
     function toggleLogConsole() {
-      if (isLogConsoleOpen) {
-        closeLogConsole();
-      } else {
-        openLogConsole();
-        fetchLogs();
-      }
+      switchTab('logs');
     }
 
     function toggleAutoScroll() {
@@ -992,20 +988,6 @@
       if (btn) {
         btn.innerText = `Auto-Scroll: ${autoScrollEnabled ? 'ON' : 'OFF'}`;
         btn.classList.toggle('is-on', autoScrollEnabled);
-      }
-    }
-
-    function toggleConsoleMinimize() {
-      const body = document.getElementById('consoleBodyContainer');
-      const btn = document.getElementById('btnMinimizeConsole');
-      if (!body) return;
-      isConsoleMinimized = !isConsoleMinimized;
-      if (isConsoleMinimized) {
-        body.classList.add('hidden');
-        btn.innerText = 'Expand';
-      } else {
-        body.classList.remove('hidden');
-        btn.innerText = 'Minimize';
       }
     }
 
@@ -1099,8 +1081,6 @@
             consoleStatusText.innerText = 'Scanning...';
           }
 
-          // Auto-reveal live console during active scans
-          openLogConsole();
           setPollRate(750);
         } else {
           indicator.className = 'status-dot dot-idle';
@@ -1108,11 +1088,15 @@
           if (progressBar) progressBar.classList.add('hidden');
 
           if (consoleBadge) {
+            const finished = activeScanInfo && activeScanInfo.status === 'completed';
+            const failed = activeScanInfo && activeScanInfo.status === 'error';
             consoleBadge.className = 'console-badge badge-idle';
-            consoleStatusText.innerText = 'Completed';
+            consoleStatusText.innerText = finished ? 'Completed' : (failed ? 'Error' : 'Idle');
           }
 
           if (wasScanning) {
+            const finishedMode = activeScanInfo && activeScanInfo.mode;
+            const finishedStatus = activeScanInfo && activeScanInfo.status;
             await fetchLogs();
             await loadData();
             await loadReportsAndHistory();
@@ -1123,13 +1107,17 @@
               btnStart.disabled = false;
               btnStart.innerHTML = '<span>▶️ Generate Report</span>';
             }
+            if (finishedMode === 'missing' && finishedStatus === 'completed') {
+              reportSubFilter = 'missing';
+              switchTab('report');
+            }
           } else if (!reconciledStaleJobs && savedJobsData.some(j => j.last_status === 'running')) {
             reconciledStaleJobs = true;
             await loadScanJobs();
           }
         }
 
-        if (isLogConsoleOpen || isScanning) {
+        if (activeTab === 'logs' || isScanning) {
           await fetchLogs();
         }
       } catch (e) {
@@ -1144,7 +1132,8 @@
       const doujinCount = duplicatesData.filter(g => g.target_type === 'doujinshi').length;
       const videoCount = duplicatesData.filter(g => g.target_type === 'video').length;
       const totalDupes = duplicatesData.length;
-      const partialsCount = partialsData.length;
+      const partialsCount = partialsData.filter(p => p.issue_type !== 'missing_chapters').length;
+      const missingCount = partialsData.filter(p => p.issue_type === 'missing_chapters').length;
 
       const tabBadge = document.getElementById('tabReportDuplicatesBadge');
       if (tabBadge) tabBadge.innerText = totalDupes;
@@ -1163,6 +1152,9 @@
 
       const countPartials = document.getElementById('subfilterCountPartials');
       if (countPartials) countPartials.innerText = partialsCount;
+
+      const countMissing = document.getElementById('subfilterCountMissing');
+      if (countMissing) countMissing.innerText = missingCount;
     }
 
     async function loadData() {
@@ -1357,7 +1349,7 @@
                       <span class="chip">${escapeHtml(run.mode || '')}</span>
                       <span class="mono muted">${escapeHtml(run.timestamp || '')}</span>
                     </div>
-                    <div class="hint">Scanned ${run.total_scanned} items · ${run.duplicates_count} duplicate groups${run.partials_count > 0 ? ` · ${run.partials_count} partials` : ''} · ${run.duration_seconds}s</div>
+                    <div class="hint">Scanned ${run.total_scanned} items · ${run.mode === 'missing' ? `${run.partials_count || 0} series with gaps` : `${run.duplicates_count} duplicate groups${run.partials_count > 0 ? ` · ${run.partials_count} partials` : ''}`} · ${run.duration_seconds}s</div>
                   </div>
                 </div>
                 ${actions}
@@ -1411,6 +1403,7 @@
             image: 'Name and Hash',
             visual: 'Visual Similarity',
             exact: 'Exact Hash Check',
+            missing: 'Missing Chapters',
             reference: 'Reference Position',
             similar: 'Similar Video'
           };
@@ -1429,7 +1422,10 @@
           if (liveJob) {
             statusBadge = '<span class="text-gold scanning-pulse">Running now...</span>';
           } else if (job.last_status === 'completed') {
-            statusBadge = `<span class="text-keep">Completed (${job.last_duplicates_count || 0} dupes found)</span>`;
+            const resultLabel = job.mode === 'missing'
+              ? `${job.last_duplicates_count || 0} series with gaps`
+              : `${job.last_duplicates_count || 0} dupes found`;
+            statusBadge = `<span class="text-keep">Completed (${resultLabel})</span>`;
           } else if (job.last_status === 'failed') {
             statusBadge = '<span class="text-delete">Last run failed</span>';
           } else if (job.last_status === 'interrupted') {
@@ -1530,17 +1526,21 @@
       }
       if (modeSelect.value === 'reference') {
         target.value = 'doujinshi';
+      } else if (modeSelect.value === 'missing') {
+        target.value = 'manga';
       }
 
       const isReference = modeSelect.value === 'reference';
+      const isMissing = modeSelect.value === 'missing';
       const isVideo = target.value === 'video';
       modeSelect.disabled = isVideo;
-      target.disabled = isReference;
+      target.disabled = isReference || isMissing;
       Array.from(modeSelect.options).forEach(opt => {
         opt.disabled = isVideo ? opt.value !== 'similar' : (opt.value === 'similar');
       });
       Array.from(target.options).forEach(opt => {
         if (isReference) opt.disabled = opt.value !== 'doujinshi';
+        else if (isMissing) opt.disabled = opt.value !== 'manga';
         else opt.disabled = false;
       });
       if (block) block.classList.toggle('hidden', !isReference);
@@ -1548,9 +1548,11 @@
       if (pathsHint) {
         pathsHint.textContent = isReference
           ? 'Compare directories. Exact duplicates are found here. The copy whose relative path matches the reference library is kept.'
-          : (isVideo
-            ? 'Every subdirectory is scanned. Near-duplicate videos are grouped even when the file names differ.'
-            : 'Multiple paths are scanned sequentially in one job.');
+          : (isMissing
+            ? 'Each series is checked for whole chapter numbers missing between the first and last chapter on disk. This job only lists them.'
+            : (isVideo
+              ? 'Every subdirectory is scanned. Near-duplicate videos are grouped even when the file names differ.'
+              : 'Multiple paths are scanned sequentially in one job.'));
       }
     }
 
@@ -1673,17 +1675,6 @@
           isScanning = true;
           activeScanInfo = { job_id: jobId, status: 'running' };
           reconciledStaleJobs = false;
-          // Open and scroll to live console panel
-          const consolePanel = document.getElementById('liveScanConsolePanel');
-          if (consolePanel) {
-            consolePanel.classList.remove('hidden');
-            consolePanel.scrollIntoView({ behavior: 'smooth' });
-          }
-          isLogConsoleOpen = true;
-          const btnToggle = document.getElementById('btnToggleLogs');
-          if (btnToggle) btnToggle.classList.add('is-live');
-
-          // Trigger poll rate acceleration
           setPollRate(750);
           await loadScanJobs();
         } else {
@@ -1716,11 +1707,12 @@
     }
 
     function switchTab(tab) {
-      if (['manga', 'doujinshi', 'video', 'partials'].includes(tab)) {
+      if (['manga', 'doujinshi', 'video', 'partials', 'missing'].includes(tab)) {
         reportSubFilter = tab;
         tab = 'report';
       }
       activeTab = tab;
+      isLogConsoleOpen = tab === 'logs';
 
       if (typeof closeSidebar === 'function') closeSidebar();
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('is-active'));
@@ -1731,6 +1723,7 @@
       const jobsView = document.getElementById('jobsView');
       const reportsView = document.getElementById('reportsView');
       const settingsView = document.getElementById('settingsView');
+      const logsView = document.getElementById('logsView');
       const reportViewContainer = document.getElementById('reportViewContainer');
       const activeViewLabel = document.getElementById('activeViewLabel');
 
@@ -1738,6 +1731,7 @@
       if (jobsView) jobsView.classList.add('hidden');
       if (reportsView) reportsView.classList.add('hidden');
       if (settingsView) settingsView.classList.add('hidden');
+      if (logsView) logsView.classList.add('hidden');
       if (reportViewContainer) reportViewContainer.classList.add('hidden');
 
       if (tab === 'samples') {
@@ -1747,6 +1741,10 @@
         if (jobsView) jobsView.classList.remove('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Scan Jobs Manager';
         loadScanJobs();
+      } else if (tab === 'logs') {
+        if (logsView) logsView.classList.remove('hidden');
+        if (activeViewLabel) activeViewLabel.innerText = 'Scan Logs';
+        fetchLogs();
       } else if (tab === 'reports') {
         if (reportsView) reportsView.classList.remove('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Saved Reports & History';
@@ -1770,7 +1768,7 @@
     }
 
     function updateSubfilterButtons() {
-      const filters = ['all', 'manga', 'doujinshi', 'video', 'partials'];
+      const filters = ['all', 'manga', 'doujinshi', 'video', 'partials', 'missing'];
       filters.forEach(f => {
         const btn = document.getElementById(`subfilter-${f}`);
         if (!btn) return;
@@ -1898,19 +1896,28 @@
       itemRegistry = [];
       filteredGroups = [];
 
-      if (reportSubFilter === 'partials') {
-        const filtered = partialsData.filter(p => !query || (p.series_name || '').toLowerCase().includes(query) || (p.description || '').toLowerCase().includes(query));
+      if (reportSubFilter === 'partials' || reportSubFilter === 'missing') {
+        const wantMissing = reportSubFilter === 'missing';
+        const filtered = partialsData.filter(p => {
+          const isMissing = p.issue_type === 'missing_chapters';
+          if (wantMissing !== isMissing) return false;
+          if (!query) return true;
+          return (p.series_name || '').toLowerCase().includes(query) || (p.description || '').toLowerCase().includes(query);
+        });
         if (filtered.length === 0) {
-          container.innerHTML = '<div class="empty-state">No partial chapter issues match filter.</div>';
+          container.innerHTML = wantMissing
+            ? '<div class="empty-state">No missing chapters match filter.</div>'
+            : '<div class="empty-state">No partial chapter issues match filter.</div>';
           return;
         }
         filtered.forEach(p => {
           const card = document.createElement('div');
           card.className = 'group-card partial-card';
+          const chip = wantMissing ? 'Missing chapters' : (p.issue_type || '');
           card.innerHTML = `
             <div class="group-head">
               <h3 class="group-title">${escapeHtml(p.series_name)}</h3>
-              <span class="chip chip-archive">${escapeHtml(p.issue_type)}</span>
+              <span class="chip chip-archive">${escapeHtml(chip)}</span>
             </div>
             <p class="recommend">${escapeHtml(p.description)}</p>
           `;
@@ -2096,6 +2103,10 @@
         mode = 'name';
         const nameMode = document.querySelector('input[name="scanMode"][value="name"]');
         if (nameMode) nameMode.checked = true;
+      } else if (source === 'target' && target !== 'manga' && mode === 'missing') {
+        mode = 'name';
+        const nameMode = document.querySelector('input[name="scanMode"][value="name"]');
+        if (nameMode) nameMode.checked = true;
       }
       if (source === 'mode' && mode === 'similar') {
         target = 'video';
@@ -2105,6 +2116,10 @@
         target = 'doujinshi';
         const doujin = document.querySelector('input[name="scanTarget"][value="doujinshi"]');
         if (doujin) doujin.checked = true;
+      } else if (source === 'mode' && mode === 'missing') {
+        target = 'manga';
+        const manga = document.querySelector('input[name="scanTarget"][value="manga"]');
+        if (manga) manga.checked = true;
       } else if (source === 'mode' && mode !== 'similar' && target === 'video') {
         target = 'manga';
         const manga = document.querySelector('input[name="scanTarget"][value="manga"]');
@@ -2112,6 +2127,7 @@
       }
 
       const isReference = mode === 'reference';
+      const isMissing = mode === 'missing';
       const isVideo = target === 'video' || mode === 'similar';
       const block = document.getElementById('scanReferencePathsBlock');
       const label = document.getElementById('scanPathsLabel');
@@ -2124,11 +2140,13 @@
       document.querySelectorAll('input[name="scanTarget"]').forEach(r => {
         if (isVideo) r.disabled = r.value !== 'video';
         else if (isReference) r.disabled = r.value !== 'doujinshi';
+        else if (isMissing) r.disabled = r.value !== 'manga';
         else r.disabled = false;
       });
       document.querySelectorAll('input[name="scanMode"]').forEach(r => {
         if (isVideo) r.disabled = r.value !== 'similar';
         else if (isReference) r.disabled = r.value !== 'reference';
+        else if (isMissing) r.disabled = r.value !== 'missing';
         else r.disabled = r.value === 'similar';
       });
     }
@@ -2203,8 +2221,6 @@
       const modalTerminal = document.getElementById('modalScanTerminal');
       const btnStart = document.getElementById('btnStartScan');
 
-      // Reveal live console on front page and inside modal
-      openLogConsole();
       if (modalLogContainer) modalLogContainer.classList.remove('hidden');
       if (modalTerminal) modalTerminal.innerHTML = '<div class="text-gold font-mono">🚀 Initiating scan job...</div>';
 
@@ -2221,7 +2237,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            target: mode === 'reference' ? 'doujinshi' : (mode === 'similar' ? 'video' : target),
+            target: mode === 'reference' ? 'doujinshi' : (mode === 'similar' ? 'video' : (mode === 'missing' ? 'manga' : target)),
             mode: mode,
             paths: rawPaths,
             reference_paths: mode === 'reference' ? referencePaths : []
@@ -2430,7 +2446,6 @@
 
     async function parseSampleTree(sampleFilePath) {
       document.getElementById('statusMessage').innerText = `Ingesting ${sampleFilePath}...`;
-      openLogConsole();
       try {
         const res = await fetch('/api/parse-tree', {
           method: 'POST',

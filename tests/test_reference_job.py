@@ -161,3 +161,56 @@ def test_reference_job_validation():
             raise AssertionError("nested reference directory should be rejected")
         except ValueError as exc:
             assert "overlap" in str(exc)
+
+
+def test_reference_hash_reports_the_folder_before_reading_it():
+    import src.image_hasher as image_hasher
+
+    order = []
+
+    def callback(message, level="INFO"):
+        order.append(("log", level, message))
+
+    def fake_fingerprint(path):
+        order.append(("hash", path))
+        return None
+
+    original = image_hasher.folder_content_fingerprint
+    image_hasher.folder_content_fingerprint = fake_fingerprint
+    try:
+        items = [
+            {"file_path": f"/library/Work {index}", "raw_name": f"Work {index}", "work_name": f"Work {index}"}
+            for index in (1, 2, 3)
+        ]
+        detect_reference_duplicates(items, [items[0]], progress_callback=callback)
+    finally:
+        image_hasher.folder_content_fingerprint = original
+
+    hash_at = order.index(("hash", "/library/Work 2"))
+    progress_at = order.index(("log", "PROGRESS", "Hashing compare 2/3: Work 2"))
+    assert progress_at < hash_at
+    assert ("log", "HASH", "Hashing compare 1/3: Work 1") in order
+    assert ("log", "HASH", "Hashing compare 3/3: Work 3") in order
+    assert ("log", "HASH", "Hashing reference 1/1: Work 1") in order
+
+
+def test_progress_level_updates_the_subtitle_without_a_log_row():
+    from src.web.app import STATE, add_scan_log
+
+    before = len(STATE["logs"])
+    add_scan_log("Hashing compare 2/9: Example", "PROGRESS")
+    assert len(STATE["logs"]) == before
+    assert STATE["scan_progress"] == "Hashing compare 2/9: Example"
+    add_scan_log("Hashing compare 1/9: Example", "HASH")
+    assert len(STATE["logs"]) == before + 1
+    assert STATE["logs"][-1]["message"] == "Hashing compare 1/9: Example"
+
+
+if __name__ == "__main__":
+    test_matching_relative_path_is_the_keeper()
+    test_no_shared_relative_path_stays_unresolved()
+    test_several_position_matches_keep_the_largest()
+    test_reference_job_validation()
+    test_reference_hash_reports_the_folder_before_reading_it()
+    test_progress_level_updates_the_subtitle_without_a_log_row()
+    print("ok")

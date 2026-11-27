@@ -19,6 +19,7 @@ from src.config import load_config, normalize_path
 from src.detector import (
     detect_manga_duplicates,
     detect_manga_partials,
+    detect_missing_chapters,
     detect_doujinshi_duplicates,
     detect_visual_duplicates,
     detect_exact_hash_duplicates,
@@ -33,7 +34,7 @@ from src.parser import parse_tree_dump_lines
 from src.actions import ActionExecutor
 from src.reporter import export_json, export_csv, export_html
 from src.models import DuplicateGroup, PartialIssue
-from src.web.jobs import job_manager, ScanJobCreatePayload, ScanJobUpdatePayload, validate_reference_directories
+from src.web.jobs import job_manager, ScanJobCreatePayload, ScanJobUpdatePayload, normalize_job_mode, validate_reference_directories
 
 app = FastAPI(title="FindDuplicates Dashboard", version="2.1.0")
 
@@ -109,21 +110,28 @@ def _cached_report_meta(path: Path) -> Dict[str, Any]:
 _LOG_ID_COUNTER = 0
 
 def add_scan_log(message: str, level: str = "INFO"):
-    """Appends a timestamped log entry to STATE with level tags."""
+    """Appends a timestamped log entry to STATE with level tags.
+
+    PROGRESS updates the live subtitle only, so a long hash can show the
+    current folder without adding a log row for every item.
+    """
+    normalized = (level or "INFO").upper()
+    STATE["scan_progress"] = message
+    if normalized == "PROGRESS":
+        return
     global _LOG_ID_COUNTER
     _LOG_ID_COUNTER += 1
     timestamp = datetime.now().strftime("%H:%M:%S")
     entry = {
         "id": _LOG_ID_COUNTER,
         "time": timestamp,
-        "level": level.upper(),  # INFO, SCAN, HASH, WARN, ERROR, SUCCESS
+        "level": normalized,  # INFO, SCAN, HASH, WARN, ERROR, SUCCESS
         "message": message
     }
     STATE["logs"].append(entry)
     if len(STATE["logs"]) > 1000:
         STATE["logs"] = STATE["logs"][-1000:]
-    STATE["scan_progress"] = message
-    print(f"[{timestamp}] [{level.upper()}] {message}")
+    print(f"[{timestamp}] [{normalized}] {message}")
 
 
 def record_run_history(target: str, mode: str, total_scanned: int, duplicates_count: int, partials_count: int, duration_sec: float, report_file: str, status: str = "completed", job_name: Optional[str] = None, job_id: Optional[str] = None):
@@ -225,7 +233,7 @@ class ParseTreePayload(BaseModel):
 
 class ScanPayload(BaseModel):
     target: str = "manga"  # 'manga', 'doujinshi', 'video', 'all'
-    mode: str = "name"     # 'name', 'image', 'visual', 'exact', 'reference', 'similar'
+    mode: str = "name"     # 'name', 'image', 'visual', 'exact', 'reference', 'missing', 'similar'
     paths: Optional[List[str]] = None
     manga_paths: Optional[List[str]] = None
     doujinshi_paths: Optional[List[str]] = None
@@ -610,6 +618,7 @@ def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
     paths = job.get("paths", [])
     reference_paths = job.get("reference_paths") or []
     try:
+        target, mode = normalize_job_mode(target, mode)
         validate_reference_directories(target, mode, paths, reference_paths)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
@@ -838,6 +847,11 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
         if excluded_manga:
             add_scan_log(f"Manga exclusions applied ({len(excluded_manga)} titles): {', '.join(excluded_manga[:4])}{'...' if len(excluded_manga) > 4 else ''}", "INFO")
 
+        target, mode = normalize_job_mode(target, mode)
+        if STATE.get("active_scan_info"):
+            STATE["active_scan_info"]["target"] = target
+            STATE["active_scan_info"]["mode"] = mode
+
         cfg = load_config()
         if mode == "reference":
             target = "doujinshi"
@@ -976,6 +990,14 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
                     progress_callback=lambda msg, lvl="HASH": add_scan_log(msg, lvl),
                 )
                 parts = []
+            elif mode == "missing":
+                add_scan_log(f"Checking {len(chapters)} manga chapters for missing numbers...", "INFO")
+                dupes = []
+                parts = detect_missing_chapters(
+                    chapters,
+                    progress_callback=lambda msg, lvl="SCAN": add_scan_log(msg, lvl),
+                )
+                STATE["doujinshi_duplicates"] = []
             else:
                 add_scan_log(f"Running intra-series duplicate detector on {len(chapters)} manga chapters...", "INFO")
                 dupes = detect_manga_duplicates(chapters)
@@ -1098,7 +1120,8 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
         STATE["loaded_report_name"] = primary_rep_json
 
         if job_id:
-            job_manager.update_job_run_status(job_id, status="completed", report_file=primary_rep_json, duplicates_count=len(all_dupes))
+            gap_count = len(all_parts) if mode == "missing" else len(all_dupes)
+            job_manager.update_job_run_status(job_id, status="completed", report_file=primary_rep_json, duplicates_count=gap_count)
 
         record_run_history(
             target=target,
@@ -1112,20 +1135,28 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             job_name=effective_job_name,
             job_id=job_id
         )
-        STATE["status_message"] = (
-            f"Scan finished in {elapsed}s: {len(STATE['manga_duplicates'])} manga, "
-            f"{len(STATE['doujinshi_duplicates'])} doujinshi, and "
-            f"{len(STATE.get('video_duplicates', []))} video duplicate groups detected."
-        )
+        if mode == "missing":
+            STATE["status_message"] = (
+                f"Scan finished in {elapsed}s: {len(all_parts)} series with missing chapters."
+            )
+            add_scan_log(
+                f"Scan job completed in {elapsed}s. {len(all_parts)} series have missing chapters.",
+                "SUCCESS",
+            )
+        else:
+            STATE["status_message"] = (
+                f"Scan finished in {elapsed}s: {len(STATE['manga_duplicates'])} manga, "
+                f"{len(STATE['doujinshi_duplicates'])} doujinshi, and "
+                f"{len(STATE.get('video_duplicates', []))} video duplicate groups detected."
+            )
+            add_scan_log(
+                f"🎉 Scan job completed in {elapsed}s! Scanned {STATE['total_scanned']} items. Found {len(all_dupes)} duplicate groups.",
+                "SUCCESS"
+            )
         STATE["scan_progress"] = "Scan finished successfully."
         if STATE.get("active_scan_info"):
             STATE["active_scan_info"]["status"] = "completed"
             STATE["active_scan_info"]["elapsed_seconds"] = elapsed
-
-        add_scan_log(
-            f"🎉 Scan job completed in {elapsed}s! Scanned {STATE['total_scanned']} items. Found {len(all_dupes)} duplicate groups.",
-            "SUCCESS"
-        )
 
     except Exception as e:
         import traceback
@@ -1148,18 +1179,19 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
         return JSONResponse(status_code=400, content={"error": "A scan is already in progress. Please wait."})
 
     try:
-        validate_reference_directories(payload.target, payload.mode, payload.paths, payload.reference_paths)
+        target, mode = normalize_job_mode(payload.target, payload.mode)
+        validate_reference_directories(target, mode, payload.paths, payload.reference_paths)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
-    _begin_scan(payload.target, payload.mode, payload.job_id, payload.job_name)
+    _begin_scan(target, mode, payload.job_id, payload.job_name)
     if payload.job_id:
         job_manager.update_job_run_status(payload.job_id, status="running")
 
     background_tasks.add_task(
         _run_background_scan,
-        target=payload.target,
-        mode=payload.mode,
+        target=target,
+        mode=mode,
         paths=payload.paths,
         manga_paths=payload.manga_paths,
         doujinshi_paths=payload.doujinshi_paths,
@@ -1170,7 +1202,7 @@ def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
     )
     return {
         "status": "started",
-        "message": f"Scan triggered for target '{payload.target}' using {payload.mode}-based modality."
+        "message": f"Scan triggered for target '{target}' using {mode}-based modality."
     }
 
 
