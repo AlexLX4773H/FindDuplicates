@@ -592,7 +592,11 @@ def _path_identity(data: dict) -> str:
 
 
 def _hash_library(items: List[Any], label: str, progress_callback=None):
-    """Hash each folder, reporting the current name before the read starts."""
+    """Hash each folder, reporting the current name before the read starts.
+
+    The progress callback runs before the folder is read, so a cancel raised
+    there stops the scan before the next folder is hashed.
+    """
     from src.image_hasher import folder_content_fingerprint
 
     total = len(items)

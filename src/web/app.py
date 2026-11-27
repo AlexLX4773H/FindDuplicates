@@ -7,6 +7,8 @@ and click-to-confirm file actions.
 
 import os
 import re
+import threading
+import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -57,7 +59,17 @@ STATE = {
     "active_scan_info": None, # Optional[Dict[str, Any]]
     "loaded_report_name": None,
     "run_history": [],       # List[Dict[str, Any]]
+    "queue": [],             # Waiting scan entries
+    "running_entry": None,   # Scan entry currently executing
 }
+
+class ScanCancelled(Exception):
+    """Raised when the user cancels the scan that is in progress."""
+
+
+_SCAN_LOCK = threading.Lock()
+_CANCEL = threading.Event()
+_SCAN_THREAD_ID: Optional[int] = None
 
 _REPORT_META_CACHE: Dict[str, Any] = {}
 _HIDDEN_REPORTS = {"scan_jobs.json", "latest_report.json"}
@@ -114,7 +126,10 @@ def add_scan_log(message: str, level: str = "INFO"):
 
     PROGRESS updates the live subtitle only, so a long hash can show the
     current folder without adding a log row for every item.
+    A raised cancel flag stops the scan at this log line.
     """
+    if _CANCEL.is_set() and threading.get_ident() == _SCAN_THREAD_ID:
+        raise ScanCancelled()
     normalized = (level or "INFO").upper()
     STATE["scan_progress"] = message
     if normalized == "PROGRESS":
@@ -241,6 +256,116 @@ class ScanPayload(BaseModel):
     job_id: Optional[str] = None
     job_name: Optional[str] = None
     excluded_manga: Optional[List[str]] = None
+    queue: bool = False
+
+
+class QueueReorderPayload(BaseModel):
+    queue_id: str
+    direction: str
+
+
+def _public_queue_entry(entry: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not entry:
+        return None
+    return {
+        "queue_id": entry.get("queue_id"),
+        "job_id": entry.get("job_id"),
+        "job_name": entry.get("job_name") or "Scan",
+        "target": entry.get("target"),
+        "mode": entry.get("mode"),
+    }
+
+
+def _new_scan_entry(
+    job_name: str,
+    target: str,
+    mode: str,
+    paths: Optional[List[str]],
+    reference_paths: Optional[List[str]],
+    excluded_manga: Optional[List[str]],
+    job_id: Optional[str] = None,
+    manga_paths: Optional[List[str]] = None,
+    doujinshi_paths: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    return {
+        "queue_id": f"q_{uuid.uuid4().hex[:8]}",
+        "job_id": job_id,
+        "job_name": job_name,
+        "target": target,
+        "mode": mode,
+        "paths": list(paths or []),
+        "manga_paths": manga_paths,
+        "doujinshi_paths": doujinshi_paths,
+        "reference_paths": list(reference_paths or []),
+        "excluded_manga": list(excluded_manga or []),
+    }
+
+
+def _submit_scan(entry: Dict[str, Any], background_tasks: BackgroundTasks, queue: bool) -> str:
+    """Start the entry now, append it, or report that a scan is already running."""
+    with _SCAN_LOCK:
+        if STATE["is_scanning"]:
+            if not queue:
+                return "busy"
+            STATE["queue"].append(entry)
+            return "queued"
+        STATE["is_scanning"] = True
+        STATE["running_entry"] = entry
+    _begin_scan(entry["target"], entry["mode"], entry.get("job_id"), entry.get("job_name"), entry["queue_id"])
+    if entry.get("job_id"):
+        job_manager.update_job_run_status(entry["job_id"], status="running")
+    background_tasks.add_task(_scan_driver)
+    return "started"
+
+
+def _scan_driver() -> None:
+    """Run the current entry, then each queued entry, until the queue is empty."""
+    global _SCAN_THREAD_ID
+    _SCAN_THREAD_ID = threading.get_ident()
+    try:
+        while True:
+            with _SCAN_LOCK:
+                entry = dict(STATE["running_entry"]) if STATE.get("running_entry") else None
+            if not entry:
+                with _SCAN_LOCK:
+                    STATE["is_scanning"] = False
+                return
+            _CANCEL.clear()
+            if entry.get("job_id"):
+                job_manager.update_job_run_status(entry["job_id"], status="running")
+            try:
+                _run_background_scan(
+                    target=entry["target"],
+                    mode=entry["mode"],
+                    paths=entry.get("paths"),
+                    manga_paths=entry.get("manga_paths"),
+                    doujinshi_paths=entry.get("doujinshi_paths"),
+                    job_id=entry.get("job_id"),
+                    job_name=entry.get("job_name"),
+                    excluded_manga=entry.get("excluded_manga"),
+                    reference_paths=entry.get("reference_paths"),
+                    queue_id=entry.get("queue_id"),
+                )
+            except ScanCancelled:
+                _CANCEL.clear()
+                if entry.get("job_id"):
+                    job_manager.update_job_run_status(entry["job_id"], status="cancelled")
+                add_scan_log(f"Scan cancelled: '{entry.get('job_name') or 'Scan'}'.", "WARN")
+                STATE["status_message"] = "Scan cancelled."
+                STATE["scan_progress"] = "Scan cancelled."
+                if STATE.get("active_scan_info"):
+                    STATE["active_scan_info"]["status"] = "cancelled"
+                    STATE["active_scan_info"]["queue_id"] = entry.get("queue_id")
+            with _SCAN_LOCK:
+                if STATE["queue"]:
+                    STATE["running_entry"] = STATE["queue"].pop(0)
+                    continue
+                STATE["running_entry"] = None
+                STATE["is_scanning"] = False
+                return
+    finally:
+        if _SCAN_THREAD_ID == threading.get_ident():
+            _SCAN_THREAD_ID = None
 
 
 @app.get("/api/state")
@@ -259,6 +384,8 @@ def get_state():
         "active_scan_info": STATE.get("active_scan_info"),
         "loaded_report_name": STATE.get("loaded_report_name") or None,
         "run_history_count": len(STATE.get("run_history", [])),
+        "running": _public_queue_entry(STATE.get("running_entry")) if STATE.get("is_scanning") else None,
+        "queue": [_public_queue_entry(entry) for entry in STATE.get("queue", [])],
     }
 
 
@@ -586,7 +713,7 @@ def delete_scan_job(job_id: str):
     return {"status": "deleted", "job_id": job_id}
 
 
-def _begin_scan(target: str, mode: str, job_id: Optional[str] = None, job_name: Optional[str] = None) -> None:
+def _begin_scan(target: str, mode: str, job_id: Optional[str] = None, job_name: Optional[str] = None, queue_id: Optional[str] = None) -> None:
     """Marks a scan active before the HTTP response returns, so a second run is rejected immediately."""
     display = job_name or f"{target} ({mode}-based)"
     STATE["is_scanning"] = True
@@ -597,18 +724,20 @@ def _begin_scan(target: str, mode: str, job_id: Optional[str] = None, job_name: 
         "mode": mode,
         "job_name": job_name,
         "job_id": job_id,
+        "queue_id": queue_id,
         "started_at": datetime.now().strftime("%H:%M:%S"),
         "status": "running",
         "elapsed_seconds": 0,
     }
 
 
-@app.post("/api/jobs/{job_id}/run")
-def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
-    """Executes a saved scan job in the background."""
-    if STATE["is_scanning"]:
-        return JSONResponse(status_code=400, content={"error": "A scan is already in progress. Please wait for it to complete."})
+class RunJobPayload(BaseModel):
+    queue: bool = False
 
+
+@app.post("/api/jobs/{job_id}/run")
+def run_scan_job(job_id: str, background_tasks: BackgroundTasks, payload: Optional[RunJobPayload] = None):
+    """Executes a saved scan job, or appends it when a scan is already running."""
     job = job_manager.get_job(job_id)
     if not job:
         return JSONResponse(status_code=404, content={"error": f"Job not found: {job_id}"})
@@ -623,26 +752,34 @@ def run_scan_job(job_id: str, background_tasks: BackgroundTasks):
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
-    _begin_scan(target, mode, job["id"], job["name"])
-    job_manager.update_job_run_status(job_id, status="running")
-    excluded_manga = job.get("excluded_manga", [])
-
-    background_tasks.add_task(
-        _run_background_scan,
+    entry = _new_scan_entry(
+        job_name=job["name"],
         target=target,
         mode=mode,
         paths=paths,
+        reference_paths=reference_paths,
+        excluded_manga=job.get("excluded_manga") or [],
+        job_id=job["id"],
         manga_paths=paths if target in ("manga", "all") else None,
         doujinshi_paths=paths if target in ("doujinshi", "all") else None,
-        job_id=job["id"],
-        job_name=job["name"],
-        excluded_manga=excluded_manga,
-        reference_paths=reference_paths,
     )
+    result = _submit_scan(entry, background_tasks, queue=bool(payload and payload.queue))
+    if result == "busy":
+        return JSONResponse(status_code=409, content={"error": "A scan is already running.", "code": "busy"})
+    if result == "queued":
+        add_scan_log(f"Queued Scan Job '{job['name']}'.", "INFO")
+        return {
+            "status": "queued",
+            "queue_id": entry["queue_id"],
+            "job_id": job_id,
+            "job_name": job["name"],
+            "message": f"Scan Job '{job['name']}' added to the queue."
+        }
 
     add_scan_log(f"Executing Scan Job '{job['name']}' across {len(paths)} locations...", "INFO")
     return {
         "status": "started",
+        "queue_id": entry["queue_id"],
         "job_id": job_id,
         "job_name": job["name"],
         "message": f"Scan Job '{job['name']}' launched in background."
@@ -826,7 +963,7 @@ def run_parse_tree(payload: ParseTreePayload):
         }
 
 
-def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None, excluded_manga: Optional[List[str]] = None, reference_paths: Optional[List[str]] = None):
+def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], manga_paths: Optional[List[str]], doujinshi_paths: Optional[List[str]], job_id: Optional[str] = None, job_name: Optional[str] = None, excluded_manga: Optional[List[str]] = None, reference_paths: Optional[List[str]] = None, queue_id: Optional[str] = None):
     start_time = datetime.now()
     try:
         STATE["is_scanning"] = True
@@ -838,6 +975,7 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             "mode": mode,
             "job_name": job_name,
             "job_id": job_id,
+            "queue_id": queue_id,
             "started_at": start_time.strftime("%H:%M:%S"),
             "status": "running",
             "elapsed_seconds": 0
@@ -1158,6 +1296,10 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
             STATE["active_scan_info"]["status"] = "completed"
             STATE["active_scan_info"]["elapsed_seconds"] = elapsed
 
+    except ScanCancelled:
+        if STATE.get("active_scan_info"):
+            STATE["active_scan_info"]["status"] = "cancelled"
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1168,42 +1310,78 @@ def _run_background_scan(target: str, mode: str, paths: Optional[List[str]], man
         STATE["scan_progress"] = f"Error: {e}"
         if STATE.get("active_scan_info"):
             STATE["active_scan_info"]["status"] = "error"
-    finally:
-        STATE["is_scanning"] = False
 
 
 @app.post("/api/scan")
 def trigger_scan(payload: ScanPayload, background_tasks: BackgroundTasks):
     """Triggers a background scan with single or multiple custom paths."""
-    if STATE["is_scanning"]:
-        return JSONResponse(status_code=400, content={"error": "A scan is already in progress. Please wait."})
-
     try:
         target, mode = normalize_job_mode(payload.target, payload.mode)
         validate_reference_directories(target, mode, payload.paths, payload.reference_paths)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
-    _begin_scan(target, mode, payload.job_id, payload.job_name)
-    if payload.job_id:
-        job_manager.update_job_run_status(payload.job_id, status="running")
-
-    background_tasks.add_task(
-        _run_background_scan,
+    display_name = payload.job_name or f"Quick {target} scan"
+    entry = _new_scan_entry(
+        job_name=display_name,
         target=target,
         mode=mode,
         paths=payload.paths,
+        reference_paths=payload.reference_paths,
+        excluded_manga=payload.excluded_manga,
+        job_id=payload.job_id,
         manga_paths=payload.manga_paths,
         doujinshi_paths=payload.doujinshi_paths,
-        job_id=payload.job_id,
-        job_name=payload.job_name,
-        excluded_manga=payload.excluded_manga,
-        reference_paths=payload.reference_paths,
     )
+    result = _submit_scan(entry, background_tasks, queue=bool(payload.queue))
+    if result == "busy":
+        return JSONResponse(status_code=409, content={"error": "A scan is already running.", "code": "busy"})
+    if result == "queued":
+        add_scan_log(f"Queued scan '{display_name}'.", "INFO")
+        return {
+            "status": "queued",
+            "queue_id": entry["queue_id"],
+            "message": f"Scan '{display_name}' added to the queue."
+        }
     return {
         "status": "started",
+        "queue_id": entry["queue_id"],
         "message": f"Scan triggered for target '{target}' using {mode}-based modality."
     }
+
+
+@app.post("/api/queue/reorder")
+def reorder_queue(payload: QueueReorderPayload):
+    """Move a waiting scan one place up or down. The running scan stays put."""
+    direction = (payload.direction or "").strip().lower()
+    if direction not in ("up", "down"):
+        return JSONResponse(status_code=400, content={"error": "Direction must be up or down."})
+    with _SCAN_LOCK:
+        queue = STATE["queue"]
+        index = next((i for i, entry in enumerate(queue) if entry.get("queue_id") == payload.queue_id), None)
+        if index is None:
+            return JSONResponse(status_code=404, content={"error": "That job is not waiting in the queue."})
+        swap = index - 1 if direction == "up" else index + 1
+        if 0 <= swap < len(queue):
+            queue[index], queue[swap] = queue[swap], queue[index]
+        public = [_public_queue_entry(entry) for entry in queue]
+    return {"status": "reordered", "queue": public}
+
+
+@app.post("/api/queue/{queue_id}/cancel")
+def cancel_queued_scan(queue_id: str):
+    """Remove a waiting scan, or ask the running scan to stop."""
+    with _SCAN_LOCK:
+        running = STATE.get("running_entry")
+        if STATE.get("is_scanning") and running and running.get("queue_id") == queue_id:
+            _CANCEL.set()
+            return {"status": "cancelling", "queue_id": queue_id}
+        before = len(STATE["queue"])
+        STATE["queue"] = [entry for entry in STATE["queue"] if entry.get("queue_id") != queue_id]
+        if len(STATE["queue"]) == before:
+            return JSONResponse(status_code=404, content={"error": "That job is not in the queue."})
+    add_scan_log("Removed a job from the queue.", "INFO")
+    return {"status": "removed", "queue_id": queue_id}
 
 
 @app.get("/api/settings/cache")

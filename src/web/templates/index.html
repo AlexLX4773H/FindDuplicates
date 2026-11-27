@@ -394,6 +394,13 @@
           </span>
           <span id="tabJobsCountBadge" class="nav-count">0</span>
         </button>
+        <button type="button" onclick="switchTab('running')" id="tab-running" class="nav-item tab-btn">
+          <span class="nav-item-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+            Running
+          </span>
+          <span id="tabRunningCountBadge" class="nav-count">0</span>
+        </button>
         <button type="button" onclick="switchTab('logs')" id="tab-logs" class="nav-item tab-btn">
           <span class="nav-item-left">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h12M8 12h12M8 18h8"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>
@@ -543,6 +550,18 @@
               <button onclick="parseSampleTree('sample_data/H/h_temp_d.txt')" class="btn btn-gold-ghost">Parse Doujinshi (h_temp_d)</button>
             </div>
           </div>
+        </div>
+
+        <div id="runningView" class="panel hidden">
+          <div class="panel-head">
+            <div>
+              <h2>Running</h2>
+              <p class="lead">The scan in progress and the jobs waiting behind it. One scan runs at a time.</p>
+            </div>
+          </div>
+          <div id="runningNowBlock"></div>
+          <h3 class="section-label" style="margin-top:18px">Queue</h3>
+          <div id="runningQueueBlock" style="margin-top:10px"></div>
         </div>
 
         <div id="jobsView" class="panel hidden">
@@ -867,6 +886,7 @@
     let filteredGroups = [];
     let itemRegistry = [];
     let selectedActions = {};
+    let latestState = null;
     let isScanning = false;
     let activeScanInfo = null;
     let stateFetchInFlight = false;
@@ -1046,6 +1066,7 @@
       try {
         const res = await fetch('/api/state');
         const data = await res.json();
+        latestState = data;
         const wasScanning = isScanning;
         isScanning = data.is_scanning;
         activeScanInfo = data.active_scan_info || null;
@@ -1090,8 +1111,9 @@
           if (consoleBadge) {
             const finished = activeScanInfo && activeScanInfo.status === 'completed';
             const failed = activeScanInfo && activeScanInfo.status === 'error';
+            const cancelled = activeScanInfo && activeScanInfo.status === 'cancelled';
             consoleBadge.className = 'console-badge badge-idle';
-            consoleStatusText.innerText = finished ? 'Completed' : (failed ? 'Error' : 'Idle');
+            consoleStatusText.innerText = finished ? 'Completed' : (failed ? 'Error' : (cancelled ? 'Cancelled' : 'Idle'));
           }
 
           if (wasScanning) {
@@ -1116,6 +1138,9 @@
             await loadScanJobs();
           }
         }
+
+        updateRunningBadge(data);
+        if (activeTab === 'running') renderRunning(data);
 
         if (activeTab === 'logs' || isScanning) {
           await fetchLogs();
@@ -1430,6 +1455,8 @@
             statusBadge = '<span class="text-delete">Last run failed</span>';
           } else if (job.last_status === 'interrupted') {
             statusBadge = '<span class="hint">Interrupted</span>';
+          } else if (job.last_status === 'cancelled') {
+            statusBadge = '<span class="hint">Cancelled</span>';
           } else if (job.last_status === 'running') {
             statusBadge = '<span class="hint">Not running</span>';
           }
@@ -1665,18 +1692,142 @@
       }
     }
 
+    function scanLibraryLabel(target) {
+      const labels = { manga: 'Manga / Manhwa', doujinshi: 'Doujinshi', video: 'Videos', all: 'Both Libraries' };
+      return labels[target] || target || 'Scan';
+    }
+
+    function scanModeLabel(mode) {
+      const labels = {
+        name: 'Metadata',
+        image: 'Name and Hash',
+        visual: 'Visual Similarity',
+        exact: 'Exact Hash',
+        reference: 'Reference Position',
+        missing: 'Missing Chapters',
+        similar: 'Similar Video'
+      };
+      return labels[mode] || mode || '';
+    }
+
+    function updateRunningBadge(data) {
+      const badge = document.getElementById('tabRunningCountBadge');
+      if (!badge) return;
+      const waiting = (data && data.queue) ? data.queue.length : 0;
+      badge.innerText = (data && data.is_scanning ? 1 : 0) + waiting;
+    }
+
+    function renderRunning(data) {
+      const now = document.getElementById('runningNowBlock');
+      const queueBox = document.getElementById('runningQueueBlock');
+      if (!now || !queueBox) return;
+      const state = data || { is_scanning: false, queue: [], running: null, scan_progress: '' };
+      const running = state.running;
+      if (state.is_scanning && running) {
+        now.innerHTML = `
+          <div class="job-card">
+            <div class="inline-actions" style="justify-content:space-between">
+              <div class="chip-row">
+                <span class="chip chip-gold">Running</span>
+                <span class="chip">${escapeHtml(scanLibraryLabel(running.target))}</span>
+                <span class="chip">${escapeHtml(scanModeLabel(running.mode))}</span>
+              </div>
+              <button type="button" class="btn btn-sm btn-danger-ghost" onclick="cancelQueuedScan('${running.queue_id}')">Cancel</button>
+            </div>
+            <h4>${escapeHtml(running.job_name || 'Scan')}</h4>
+            <p class="hint">${escapeHtml(state.scan_progress || 'Starting...')}</p>
+          </div>
+        `;
+      } else {
+        now.innerHTML = '<div class="empty-state">No scan is running.</div>';
+      }
+
+      const queue = state.queue || [];
+      if (!queue.length) {
+        queueBox.innerHTML = '<div class="empty-state">No jobs are waiting.</div>';
+        return;
+      }
+      queueBox.innerHTML = '';
+      queue.forEach((entry, index) => {
+        const card = document.createElement('div');
+        card.className = 'history-row';
+        card.innerHTML = `
+          <div class="history-main">
+            <span class="dot"></span>
+            <div>
+              <strong>${index + 1}. ${escapeHtml(entry.job_name || 'Scan')}</strong>
+              <div class="hint">${escapeHtml(scanLibraryLabel(entry.target))} · ${escapeHtml(scanModeLabel(entry.mode))}</div>
+            </div>
+          </div>
+          <div class="inline-actions">
+            <button type="button" class="btn btn-sm" onclick="moveQueuedScan('${entry.queue_id}', 'up')" ${index === 0 ? 'disabled' : ''}>Up</button>
+            <button type="button" class="btn btn-sm" onclick="moveQueuedScan('${entry.queue_id}', 'down')" ${index === queue.length - 1 ? 'disabled' : ''}>Down</button>
+            <button type="button" class="btn btn-sm btn-danger-ghost" onclick="cancelQueuedScan('${entry.queue_id}')">Cancel</button>
+          </div>
+        `;
+        queueBox.appendChild(card);
+      });
+    }
+
+    async function moveQueuedScan(queueId, direction) {
+      const res = await fetch('/api/queue/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ queue_id: queueId, direction })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Could not reorder the queue.');
+        return;
+      }
+      await fetchState();
+    }
+
+    async function cancelQueuedScan(queueId) {
+      const res = await fetch(`/api/queue/${queueId}/cancel`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Could not cancel that job.');
+        return;
+      }
+      await fetchState();
+    }
+
+    async function requestScan(url, body) {
+      const send = async (payload) => {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload || {})
+        });
+        const data = await res.json().catch(() => ({}));
+        return { res, data };
+      };
+      let result = await send(body || {});
+      if (result.res.status === 409) {
+        const queueIt = confirm('A scan is already running. Add this job to the queue?');
+        if (!queueIt) return { res: result.res, data: result.data, declined: true };
+        result = await send(Object.assign({}, body || {}, { queue: true }));
+      }
+      return { res: result.res, data: result.data, declined: false };
+    }
+
     async function executeScanJob(jobId) {
       try {
-        const res = await fetch(`/api/jobs/${jobId}/run`, {
-          method: 'POST'
-        });
-        const data = await res.json();
+        const { res, data, declined } = await requestScan(`/api/jobs/${jobId}/run`, {});
+        if (declined) return;
+        if (res.ok && data.status === 'queued') {
+          switchTab('running');
+          await fetchState();
+          return;
+        }
         if (res.ok) {
           isScanning = true;
           activeScanInfo = { job_id: jobId, status: 'running' };
           reconciledStaleJobs = false;
           setPollRate(750);
           await loadScanJobs();
+          await fetchState();
         } else {
           alert('Failed to launch scan job: ' + (data.error || 'Unknown error'));
         }
@@ -1724,6 +1875,7 @@
       const reportsView = document.getElementById('reportsView');
       const settingsView = document.getElementById('settingsView');
       const logsView = document.getElementById('logsView');
+      const runningView = document.getElementById('runningView');
       const reportViewContainer = document.getElementById('reportViewContainer');
       const activeViewLabel = document.getElementById('activeViewLabel');
 
@@ -1732,6 +1884,7 @@
       if (reportsView) reportsView.classList.add('hidden');
       if (settingsView) settingsView.classList.add('hidden');
       if (logsView) logsView.classList.add('hidden');
+      if (runningView) runningView.classList.add('hidden');
       if (reportViewContainer) reportViewContainer.classList.add('hidden');
 
       if (tab === 'samples') {
@@ -1741,6 +1894,11 @@
         if (jobsView) jobsView.classList.remove('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Scan Jobs Manager';
         loadScanJobs();
+      } else if (tab === 'running') {
+        if (runningView) runningView.classList.remove('hidden');
+        if (activeViewLabel) activeViewLabel.innerText = 'Running';
+        renderRunning(latestState);
+        fetchState();
       } else if (tab === 'logs') {
         if (logsView) logsView.classList.remove('hidden');
         if (activeViewLabel) activeViewLabel.innerText = 'Scan Logs';
@@ -2233,17 +2391,32 @@
       statusBox.innerHTML = '<span class="scanning-pulse">🚀 Scan request sent. Reading logs in real-time...</span>';
 
       try {
-        const res = await fetch('/api/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            target: mode === 'reference' ? 'doujinshi' : (mode === 'similar' ? 'video' : (mode === 'missing' ? 'manga' : target)),
-            mode: mode,
-            paths: rawPaths,
-            reference_paths: mode === 'reference' ? referencePaths : []
-          })
-        });
-        const data = await res.json();
+        const scanBody = {
+          target: mode === 'reference' ? 'doujinshi' : (mode === 'similar' ? 'video' : (mode === 'missing' ? 'manga' : target)),
+          mode: mode,
+          paths: rawPaths,
+          reference_paths: mode === 'reference' ? referencePaths : [],
+          job_name: 'Quick ' + (mode === 'reference' ? 'doujinshi' : (mode === 'similar' ? 'video' : (mode === 'missing' ? 'manga' : target))) + ' scan'
+        };
+        const { res, data, declined } = await requestScan('/api/scan', scanBody);
+        if (declined) {
+          statusBox.innerHTML = '<span class="hint">Left the running scan as it is.</span>';
+          if (btnStart) {
+            btnStart.disabled = false;
+            btnStart.innerHTML = '<span>▶️ Generate Report</span>';
+          }
+          return;
+        }
+        if (res.ok && data.status === 'queued') {
+          statusBox.innerHTML = '<span class="text-keep font-bold">Added to the queue.</span>';
+          if (btnStart) {
+            btnStart.disabled = false;
+            btnStart.innerHTML = '<span>▶️ Generate Report</span>';
+          }
+          closeScanModal();
+          switchTab('running');
+          return;
+        }
         if (res.ok) {
           isScanning = true;
           activeScanInfo = data.job_id ? { job_id: data.job_id, status: 'running' } : null;
